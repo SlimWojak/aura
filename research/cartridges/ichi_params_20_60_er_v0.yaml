@@ -1,7 +1,7 @@
-id: ichi_params_20_60_v0
-title: Ichimoku 20 60 parameter variant
-status: draft
-thesis: Slow the baseline Ichimoku lookbacks to reduce whipsaw in chop while preserving the same explicit cloud, TK, and Chikou confirmations.
+id: ichi_params_20_60_er_v0
+title: Ichimoku 20 60 parameter variant with ER gate
+status: queued
+thesis: Combine the slower 20/60/120/60 Ichimoku variant with ER chop filtering to test whether fewer, stronger regime-aligned entries survive fee-aware scoring.
 symbol: PF_XBTUSD
 tf: 1h
 baseline_ref: ichimoku_v0
@@ -25,15 +25,17 @@ exit_rules:
   close_on_opposite: true
   max_bars_in_trade: null
 regime:
-  type: none
-  params: {}
+  type: er
+  params:
+    period: 10
+    threshold: 0.3
 kill_criteria:
-  max_dd_points: 10000
+  max_dd_points: 50000
   min_trades: 20
   must_beat_baseline: true
   baseline_metric: total_pnl_points
-  notes: Kill if slower parameters only reduce sample size without improving PnL or drawdown versus baseline.
+  notes: Kill unless the slow ER variant beats baseline total PnL after applying fee-aware metrics when fee_bps is set.
 sources:
   - docs/BUILD_PLAN.md
-  - runtime/brain/types.py
-notes: Parked pending fee-aware comparison; uses a 20/60/120/60 slow variant and remains runnable for fee-bps smoke checks.
+  - research/cartridges/ichi_params_20_60_v0.yaml
+notes: Fee-aware scoring is required before interpreting this slow-parameter variant.

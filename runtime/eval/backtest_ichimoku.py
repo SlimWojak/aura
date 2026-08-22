@@ -30,11 +30,12 @@ from runtime.research.cartridge import load_cartridge, load_cartridges
 
 BACKTEST_REPORT_SCHEMA = "aura.backtest_report.v1"
 BACKTEST_TRADE_SCHEMA = "aura.backtest_trade.v1"
-FEE_ASSUMPTION = 0
+FEE_ASSUMPTION = "fee_bps defaults to 0; when set, each closed trade deducts entry and exit fees"
+FEE_MODEL = "1-unit price-point fees: fee_bps / 10000 * (entry_price + exit_price)"
 MODEL_DESCRIPTION = (
     "naive_v0: one position at a time, one unit notional in price points, "
     "next-bar-open execution when available else current close, no leverage, "
-    "no fees, no slippage"
+    "optional fee_bps accounting, no slippage"
 )
 FAST_ENGINE = "precomputed_ichimoku_series_v1"
 CARTRIDGE_ENGINE = "precomputed_ichimoku_cartridge_v1"
@@ -55,6 +56,7 @@ def run_backtest(
     tf: str,
     params: IchimokuParams | None = None,
     min_bars: int | None = None,
+    fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     """Walk historical candles and score the v0 Ichimoku bias.
 
@@ -97,6 +99,7 @@ def run_backtest(
             "uses next open when available, else current close."
         ),
         signal_provider=lambda index: signal_from_series(series, index=index),
+        fee_bps=fee_bps,
     )
 
 
@@ -107,6 +110,7 @@ def run_backtest_cartridge(
     symbol: str | None = None,
     tf: str | None = None,
     min_bars: int | None = None,
+    fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     """Run a supported paper research cartridge over supplied candles."""
 
@@ -137,7 +141,8 @@ def run_backtest_cartridge(
     allowed_sides = set(entry_rules["allowed_sides"])
     allowed_entry_sides = None if allowed_sides == {"long", "short"} else allowed_sides
     series = compute_ichimoku(normalized, params=params)
-    entry_gate_provider = _entry_gate_provider(normalized, cartridge=cartridge)
+    entry_gate_provider = _entry_gate_provider(normalized, series=series, cartridge=cartridge)
+    signal_provider = _signal_provider_for_cartridge(series, cartridge=cartridge)
     report = _score_backtest(
         normalized,
         symbol=safe_symbol,
@@ -153,13 +158,10 @@ def run_backtest_cartridge(
             "and only block new entries. Execution uses next open when available, "
             "else current close."
         ),
-        signal_provider=lambda index: signal_from_series(
-            series,
-            index=index,
-            chikou_mode=chikou_mode,  # type: ignore[arg-type]
-        ),
+        signal_provider=signal_provider,
         entry_gate_provider=entry_gate_provider,
         allowed_entry_sides=allowed_entry_sides,
+        fee_bps=fee_bps,
     )
     _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
     return report
@@ -172,6 +174,7 @@ def run_backtest_reference(
     tf: str,
     params: IchimokuParams | None = None,
     min_bars: int | None = None,
+    fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     """Reference implementation that recomputes Ichimoku from each prefix.
 
@@ -211,6 +214,7 @@ def run_backtest_reference(
             index=index,
             params=resolved_params,
         ),
+        fee_bps=fee_bps,
     )
 
 
@@ -249,9 +253,11 @@ def _score_backtest(
     signal_provider: _SignalProvider,
     entry_gate_provider: _EntryGateProvider | None = None,
     allowed_entry_sides: set[str] | None = None,
+    fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     if min_bars <= 0:
         raise ValueError("min_bars must be positive")
+    resolved_fee_bps = _nonnegative_float(fee_bps, "fee_bps")
 
     start_index = min_bars - 1
     bias_counts: dict[str, int] = {"long": 0, "short": 0, "flat": 0}
@@ -306,6 +312,7 @@ def _score_backtest(
                 position=position,
                 exit_execution=execution,
                 exit_reason=f"bias_{signal.bias}",
+                fee_bps=resolved_fee_bps,
             )
             trades.append(trade)
             equity_points += float(trade["pnl_points"])
@@ -344,6 +351,7 @@ def _score_backtest(
             position=position,
             exit_execution=final_execution,
             exit_reason="end_of_data",
+            fee_bps=resolved_fee_bps,
         )
         trades.append(trade)
         equity_points += float(trade["pnl_points"])
@@ -354,6 +362,24 @@ def _score_backtest(
     winning_trades = sum(1 for trade in trades if float(trade["pnl_points"]) > 0)
     evaluated_bars = len(signal_trace)
     total_pnl_points = sum(float(trade["pnl_points"]) for trade in trades)
+    total_fee_points = sum(float(trade.get("fee_points", 0.0)) for trade in trades)
+    metrics = {
+        "trade_count": trade_count,
+        "win_rate": (winning_trades / trade_count) if trade_count else 0.0,
+        "total_pnl_points": _stable_float(total_pnl_points),
+        "max_drawdown_points": _stable_float(max_drawdown_points),
+        "time_in_market": (bars_in_market / evaluated_bars) if evaluated_bars else 0.0,
+        "bars_in_market": bars_in_market,
+        "bias_counts": bias_counts,
+        "final_bias": final_bias,
+    }
+    if resolved_fee_bps > 0:
+        metrics["fee_bps"] = _stable_float(resolved_fee_bps)
+        metrics["total_fee_points"] = _stable_float(total_fee_points)
+        metrics["total_pnl_points_after_fees"] = _stable_float(
+            total_pnl_points - total_fee_points
+        )
+        metrics["fee_adjusted_baseline_metric"] = "total_pnl_points_after_fees"
     report = {
         "schema": BACKTEST_REPORT_SCHEMA,
         "ok": True,
@@ -364,21 +390,14 @@ def _score_backtest(
         "evaluated_bars": evaluated_bars,
         "min_bars": min_bars,
         "params": params.to_dict(),
+        "fee_bps": _stable_float(resolved_fee_bps),
         "fee_assumption": FEE_ASSUMPTION,
+        "fee_model": FEE_MODEL,
         "naive": True,
         "model": MODEL_DESCRIPTION,
         "engine": engine,
         "lookahead_note": lookahead_note,
-        "metrics": {
-            "trade_count": trade_count,
-            "win_rate": (winning_trades / trade_count) if trade_count else 0.0,
-            "total_pnl_points": _stable_float(total_pnl_points),
-            "max_drawdown_points": _stable_float(max_drawdown_points),
-            "time_in_market": (bars_in_market / evaluated_bars) if evaluated_bars else 0.0,
-            "bars_in_market": bars_in_market,
-            "bias_counts": bias_counts,
-            "final_bias": final_bias,
-        },
+        "metrics": metrics,
         "trades": trades,
         "signals": signal_trace,
     }
@@ -393,6 +412,7 @@ def backtest_from_store(
     min_bars: int | None = None,
     max_bars: int | None = None,
     since_ts_ms: int | None = None,
+    fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     """Read stored OHLCV and return a backtest report."""
 
@@ -400,7 +420,13 @@ def backtest_from_store(
     safe_tf = validate_tf(tf)
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
     windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
-    report = run_backtest(windowed_candles, symbol=safe_symbol, tf=safe_tf, min_bars=min_bars)
+    report = run_backtest(
+        windowed_candles,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+    )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
     report["window"] = {
@@ -423,6 +449,7 @@ def cartridge_backtest_from_store(
     max_bars: int | None = None,
     since_ts_ms: int | None = None,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
+    fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     """Read stored OHLCV and return a supported cartridge backtest report."""
 
@@ -447,6 +474,7 @@ def cartridge_backtest_from_store(
         symbol=safe_symbol,
         tf=safe_tf,
         min_bars=min_bars,
+        fee_bps=fee_bps,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
@@ -498,23 +526,48 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     exit_rules = _mapping(cartridge, "exit_rules")
     regime = _mapping(cartridge, "regime")
 
-    if entry_rules["mode"] != "always_on":
+    if cartridge.get("status") == "killed":
+        reasons.append("status='killed' is not runnable")
+
+    entry_mode = str(entry_rules["mode"])
+    require_tk_state = str(entry_rules["require_tk_state"])
+    exit_mode = str(exit_rules["mode"])
+    regime_type = str(regime["type"])
+    is_always_on = entry_mode == "always_on"
+    is_tk_cloud_strong = (
+        entry_mode == "tk_cloud_bias"
+        and require_tk_state == "tk_cross_only"
+        and exit_mode == "flat_on_rule_fail"
+        and regime_type == "none"
+        and not bool(entry_rules["require_chikou_confirmation"])
+    )
+
+    if not (is_always_on or is_tk_cloud_strong):
         reasons.append(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
     if entry_rules["require_close_vs_cloud"] != "above_for_long_below_for_short":
         reasons.append(
             "entry_rules.require_close_vs_cloud="
             f"{entry_rules['require_close_vs_cloud']!r} is not wired"
         )
-    if entry_rules["require_tk_state"] != "tenkan_over_kijun_for_long_under_for_short":
+    if is_always_on and require_tk_state != "tenkan_over_kijun_for_long_under_for_short":
         reasons.append(
             "entry_rules.require_tk_state="
             f"{entry_rules['require_tk_state']!r} is not wired"
         )
-    if not bool(entry_rules["require_chikou_confirmation"]):
+    if is_tk_cloud_strong and require_tk_state != "tk_cross_only":
+        reasons.append(
+            "entry_rules.require_tk_state="
+            f"{entry_rules['require_tk_state']!r} is not wired"
+        )
+    if is_always_on and not bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
+    if is_tk_cloud_strong and bool(entry_rules["require_chikou_confirmation"]):
+        reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if entry_rules["chikou_mode"] not in {"close", "strict"}:
         reasons.append(f"entry_rules.chikou_mode={entry_rules['chikou_mode']!r} is not wired")
-    if exit_rules["mode"] != "bias_flip":
+    if is_always_on and exit_mode != "bias_flip":
+        reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
+    if is_tk_cloud_strong and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if not bool(exit_rules["close_on_flat"]):
         reasons.append("exit_rules.close_on_flat=false is not wired")
@@ -522,7 +575,7 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         reasons.append("exit_rules.close_on_opposite=false is not wired")
     if exit_rules["max_bars_in_trade"] is not None:
         reasons.append("exit_rules.max_bars_in_trade is not wired")
-    if regime["type"] not in {"none", "adx"}:
+    if regime_type not in {"none", "adx", "er", "cloud_thickness"}:
         reasons.append(f"regime.type={regime['type']!r} is not wired")
 
     return reasons
@@ -602,6 +655,31 @@ def compute_wilder_adx(
     return adx
 
 
+def compute_efficiency_ratio(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    period: int,
+) -> list[float | None]:
+    """Compute Kaufman's Efficiency Ratio aligned to the input candles."""
+
+    if period <= 0:
+        raise ValueError("ER period must be positive")
+
+    closes = [
+        _finite_float(candle.get("close"), field_name=f"candles[{index}].close")
+        for index, candle in enumerate(candles)
+    ]
+    er_values: list[float | None] = [None] * len(candles)
+    for index in range(period, len(candles)):
+        net_change = abs(closes[index] - closes[index - period])
+        volatility = sum(
+            abs(closes[inner_index] - closes[inner_index - 1])
+            for inner_index in range(index - period + 1, index + 1)
+        )
+        er_values[index] = 0.0 if volatility <= 0 else net_change / volatility
+    return er_values
+
+
 def _params_from_cartridge(cartridge: Mapping[str, Any]) -> IchimokuParams:
     values = _mapping(cartridge, "ichimoku")
     return IchimokuParams(
@@ -615,6 +693,7 @@ def _params_from_cartridge(cartridge: Mapping[str, Any]) -> IchimokuParams:
 def _entry_gate_provider(
     candles: Sequence[Mapping[str, float | int | None]],
     *,
+    series: Any,
     cartridge: Mapping[str, Any],
 ) -> _EntryGateProvider | None:
     regime = _mapping(cartridge, "regime")
@@ -627,19 +706,187 @@ def _entry_gate_provider(
         period = _positive_int(params.get("period"), "regime.params.period")
         threshold = _positive_float(params.get("threshold"), "regime.params.threshold")
         adx_values = compute_wilder_adx(candles, period=period)
+
+        def gate(index: int) -> Mapping[str, Any]:
+            adx_value = adx_values[index]
+            values = {"adx": _stable_float(adx_value), "period": period, "threshold": threshold}
+            if adx_value is None:
+                return {"allowed": False, "reason": "adx_unavailable", "values": values}
+            if adx_value < float(threshold):
+                return {"allowed": False, "reason": "adx_below_threshold", "values": values}
+            return {"allowed": True, "reason": "adx_threshold_met", "values": values}
+
+        return gate
+    elif regime_type == "er":
+        params = _mapping(regime, "params")
+        period = _positive_int(params.get("period"), "regime.params.period")
+        threshold = _positive_float(params.get("threshold"), "regime.params.threshold")
+        er_values = compute_efficiency_ratio(candles, period=period)
+
+        def gate(index: int) -> Mapping[str, Any]:
+            er_value = er_values[index]
+            values = {"er": _stable_float(er_value), "period": period, "threshold": threshold}
+            if er_value is None:
+                return {"allowed": False, "reason": "er_unavailable", "values": values}
+            if er_value < float(threshold):
+                return {"allowed": False, "reason": "er_below_threshold", "values": values}
+            return {"allowed": True, "reason": "er_threshold_met", "values": values}
+
+        return gate
+    elif regime_type == "cloud_thickness":
+        params = _mapping(regime, "params")
+        min_pct = _positive_float(params.get("min_pct"), "regime.params.min_pct")
+        thickness_values = _cloud_thickness_pct(series)
+
+        def gate(index: int) -> Mapping[str, Any]:
+            thickness_pct = thickness_values[index]
+            values = {"thickness_pct": _stable_float(thickness_pct), "min_pct": min_pct}
+            if thickness_pct is None:
+                return {"allowed": False, "reason": "cloud_thickness_unavailable", "values": values}
+            if thickness_pct < min_pct:
+                return {"allowed": False, "reason": "cloud_thickness_below_min", "values": values}
+            return {"allowed": True, "reason": "cloud_thickness_min_met", "values": values}
+
+        return gate
     else:
         raise NotImplementedError(f"regime.type={regime_type!r} is not wired")
 
-    def gate(index: int) -> Mapping[str, Any]:
-        adx_value = adx_values[index]
-        values = {"adx": _stable_float(adx_value), "period": period, "threshold": threshold}
-        if adx_value is None:
-            return {"allowed": False, "reason": "adx_unavailable", "values": values}
-        if adx_value < float(threshold):
-            return {"allowed": False, "reason": "adx_below_threshold", "values": values}
-        return {"allowed": True, "reason": "adx_threshold_met", "values": values}
+def _signal_provider_for_cartridge(
+    series: Any,
+    *,
+    cartridge: Mapping[str, Any],
+) -> _SignalProvider:
+    entry_rules = _mapping(cartridge, "entry_rules")
+    chikou_mode = str(entry_rules["chikou_mode"])
+    if entry_rules["mode"] == "always_on":
+        return lambda index: signal_from_series(
+            series,
+            index=index,
+            chikou_mode=chikou_mode,  # type: ignore[arg-type]
+        )
+    if (
+        entry_rules["mode"] == "tk_cloud_bias"
+        and entry_rules["require_tk_state"] == "tk_cross_only"
+    ):
+        return lambda index: _tk_cloud_strong_signal_from_series(series, index=index)
+    raise NotImplementedError(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
 
-    return gate
+
+def _tk_cloud_strong_signal_from_series(series: Any, *, index: int) -> IchimokuSignal:
+    if not series.points:
+        return _empty_signal(series.params, "no_candles")
+    if not series.ok:
+        return _empty_signal(series.params, series.reason or "series_not_ready")
+    if index <= 0:
+        return _empty_signal(series.params, "missing_tk_cross_reference")
+
+    point = series.points[index]
+    previous = series.points[index - 1]
+    required_components = (
+        point.tenkan,
+        point.kijun,
+        point.senkou_span_a_displaced,
+        point.senkou_span_b_displaced,
+        previous.tenkan,
+        previous.kijun,
+    )
+    if any(value is None for value in required_components):
+        return _empty_signal(series.params, "missing_ichimoku_components")
+
+    tenkan = _required_float(point.tenkan, "tenkan")
+    kijun = _required_float(point.kijun, "kijun")
+    previous_tenkan = _required_float(previous.tenkan, "previous_tenkan")
+    previous_kijun = _required_float(previous.kijun, "previous_kijun")
+    span_a = _required_float(point.senkou_span_a_displaced, "senkou_span_a_displaced")
+    span_b = _required_float(point.senkou_span_b_displaced, "senkou_span_b_displaced")
+    cloud_top = max(span_a, span_b)
+    cloud_bottom = min(span_a, span_b)
+    close = point.close
+
+    tk_bull_cross = previous_tenkan <= previous_kijun and tenkan > kijun
+    tk_bear_cross = previous_tenkan >= previous_kijun and tenkan < kijun
+    features = {
+        "has_cloud": True,
+        "tk_bull_cross": tk_bull_cross,
+        "tk_bear_cross": tk_bear_cross,
+        "tenkan_above_cloud_top": tenkan > cloud_top,
+        "kijun_above_cloud_top": kijun > cloud_top,
+        "close_above_cloud": close > cloud_top,
+        "tenkan_below_cloud_bottom": tenkan < cloud_bottom,
+        "kijun_below_cloud_bottom": kijun < cloud_bottom,
+        "close_below_cloud": close < cloud_bottom,
+    }
+    features["bullish_rule"] = (
+        features["tk_bull_cross"]
+        and features["tenkan_above_cloud_top"]
+        and features["kijun_above_cloud_top"]
+        and features["close_above_cloud"]
+    )
+    features["bearish_rule"] = (
+        features["tk_bear_cross"]
+        and features["tenkan_below_cloud_bottom"]
+        and features["kijun_below_cloud_bottom"]
+        and features["close_below_cloud"]
+    )
+
+    bias: Bias = "flat"
+    if features["bullish_rule"]:
+        bias = "long"
+    elif features["bearish_rule"]:
+        bias = "short"
+
+    components = {
+        "close": close,
+        "cloud_top": cloud_top,
+        "cloud_bottom": cloud_bottom,
+        "tenkan": tenkan,
+        "kijun": kijun,
+        "previous_tenkan": previous_tenkan,
+        "previous_kijun": previous_kijun,
+        "senkou_span_a_raw": point.senkou_span_a_raw,
+        "senkou_span_b_raw": point.senkou_span_b_raw,
+        "senkou_span_a_displaced": span_a,
+        "senkou_span_b_displaced": span_b,
+        "chikou_mode": "close",
+    }
+    return IchimokuSignal(
+        ok=True,
+        reason=None,
+        bias=bias,
+        index=point.index,
+        ts_ms=point.ts_ms,
+        params=series.params,
+        components=components,
+        features=features,
+    )
+
+
+def _empty_signal(params: IchimokuParams, reason: str) -> IchimokuSignal:
+    return IchimokuSignal(
+        ok=False,
+        reason=reason,
+        bias="flat",
+        index=None,
+        ts_ms=None,
+        params=params,
+        components={},
+        features={},
+    )
+
+
+def _cloud_thickness_pct(series: Any) -> list[float | None]:
+    values: list[float | None] = []
+    for point in series.points:
+        span_a = point.senkou_span_a_displaced
+        span_b = point.senkou_span_b_displaced
+        close = point.close
+        if span_a is None or span_b is None or close <= 0:
+            values.append(None)
+            continue
+        cloud_top = max(span_a, span_b)
+        cloud_bottom = min(span_a, span_b)
+        values.append(((cloud_top - cloud_bottom) / close) * 100)
+    return values
 
 
 def _normalize_entry_gate(raw_gate: Mapping[str, Any]) -> dict[str, Any]:
@@ -707,6 +954,12 @@ def _positive_int(value: Any, field_name: str) -> int:
 def _positive_float(value: Any, field_name: str) -> float:
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{field_name} must be a positive number")
+    return float(value)
+
+
+def _nonnegative_float(value: Any, field_name: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative number")
     return float(value)
 
 
@@ -861,12 +1114,14 @@ def _close_trade(
     position: Mapping[str, Any],
     exit_execution: Mapping[str, Any],
     exit_reason: str,
+    fee_bps: float,
 ) -> dict[str, Any]:
     direction = int(position["direction"])
     entry_price = float(position["entry_price"])
     exit_price = float(exit_execution["price"])
     pnl_points = (exit_price - entry_price) * direction
-    return {
+    fee_points = (fee_bps / 10_000.0) * (entry_price + exit_price)
+    trade = {
         "schema": BACKTEST_TRADE_SCHEMA,
         "direction": _BIAS_BY_DIRECTION[direction],
         "entry_index": position["entry_index"],
@@ -881,6 +1136,11 @@ def _close_trade(
         "exit_reason": exit_reason,
         "pnl_points": _stable_float(pnl_points),
     }
+    if fee_bps > 0:
+        trade["fee_bps"] = _stable_float(fee_bps)
+        trade["fee_points"] = _stable_float(fee_points)
+        trade["pnl_points_after_fees"] = _stable_float(pnl_points - fee_points)
+    return trade
 
 
 def _unrealized_pnl(*, position: Mapping[str, Any], mark_price: float) -> float:

@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from runtime.brain.types import IchimokuParams
 from runtime.eval import (
+    compute_efficiency_ratio,
     compute_wilder_adx,
     run_backtest,
     run_backtest_cartridge,
@@ -101,6 +102,20 @@ class EvalHarnessTests(TestCase):
         self.assertAlmostEqual(0.0, flat_adx[5])
         self.assertAlmostEqual(0.0, flat_adx[-1])
 
+    def test_efficiency_ratio_known_trend_and_chop_values(self):
+        trend = [candle(index, 100 + index) for index in range(8)]
+        chop_closes = [100, 101, 100, 101, 100, 101, 100, 101]
+        chop = [candle(index, close) for index, close in enumerate(chop_closes)]
+
+        trend_er = compute_efficiency_ratio(trend, period=3)
+        chop_er = compute_efficiency_ratio(chop, period=3)
+
+        self.assertIsNone(trend_er[2])
+        self.assertAlmostEqual(1.0, trend_er[3])
+        self.assertAlmostEqual(1.0, trend_er[-1])
+        self.assertAlmostEqual(1 / 3, chop_er[3])
+        self.assertAlmostEqual(1 / 3, chop_er[-1])
+
     def test_adx_cartridge_gate_reduces_or_matches_trade_count(self):
         closes = [
             100 + ((index % 16) - 8) + (index * 0.03)
@@ -126,6 +141,95 @@ class EvalHarnessTests(TestCase):
         self.assertLessEqual(gated["metrics"]["trade_count"], baseline["metrics"]["trade_count"])
         self.assertEqual("precomputed_ichimoku_cartridge_v1", gated["engine"])
         self.assertIn("entry_gate", gated["signals"][0])
+
+    def test_er_cartridge_gate_reduces_or_matches_trade_count(self):
+        closes = [
+            100 + ((index % 16) - 8) + (index * 0.03)
+            for index in range(96)
+        ]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+        baseline = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        gated = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(
+                regime={"type": "er", "params": {"period": 3, "threshold": 1.1}}
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(baseline["metrics"]["trade_count"], 0)
+        self.assertLessEqual(gated["metrics"]["trade_count"], baseline["metrics"]["trade_count"])
+        self.assertIn("entry_gate", gated["signals"][0])
+
+    def test_cloud_thickness_gate_reduces_or_matches_trade_count(self):
+        closes = [
+            100 + ((index % 16) - 8) + (index * 0.03)
+            for index in range(96)
+        ]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+        baseline = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        gated = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(
+                regime={"type": "cloud_thickness", "params": {"min_pct": 1000}}
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(baseline["metrics"]["trade_count"], 0)
+        self.assertLessEqual(gated["metrics"]["trade_count"], baseline["metrics"]["trade_count"])
+        self.assertIn("entry_gate", gated["signals"][0])
+
+    def test_fee_bps_reports_after_fee_pnl_below_raw_pnl(self):
+        closes = [100, 100, 100, 101, 102, 103, 104, 103, 102, 101, 100, 99, 98, 97]
+        report = run_backtest(
+            [candle(index, close) for index, close in enumerate(closes)],
+            symbol="PF_XBTUSD",
+            tf="1h",
+            params=FAST_PARAMS,
+            fee_bps=4,
+        )
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(4, report["fee_bps"])
+        self.assertIn("total_pnl_points_after_fees", report["metrics"])
+        self.assertLess(
+            report["metrics"]["total_pnl_points_after_fees"],
+            report["metrics"]["total_pnl_points"],
+        )
+        self.assertGreater(report["metrics"]["total_fee_points"], 0)
+
+    def test_tk_cloud_strong_detects_cross_and_filters_weak_cloud(self):
+        strong_closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 110, 120, 130, 140, 150]
+        weak_closes = [100, 120, 120, 120, 118, 116, 114, 112, 110, 112, 114, 116, 118]
+        strong = run_backtest_cartridge(
+            [candle(index, close) for index, close in enumerate(strong_closes)],
+            cartridge=tk_cloud_strong_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        weak = run_backtest_cartridge(
+            [candle(index, close) for index, close in enumerate(weak_closes)],
+            cartridge=tk_cloud_strong_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(strong["metrics"]["trade_count"], 0)
+        self.assertEqual(0, weak["metrics"]["trade_count"])
+        self.assertEqual("long", strong["trades"][0]["direction"])
 
     def test_signal_for_closed_bar_ignores_future_candle_mutation(self):
         candles = [candle(index, 100 + index) for index in range(12)]
@@ -292,7 +396,12 @@ def candle(index: int, close: int | float) -> dict[str, str | int]:
     }
 
 
-def fast_cartridge(*, regime: dict) -> dict:
+def fast_cartridge(
+    *,
+    regime: dict,
+    entry_rules: dict | None = None,
+    exit_rules: dict | None = None,
+) -> dict:
     return {
         "id": "test_fast_cartridge",
         "title": "Test fast cartridge",
@@ -307,7 +416,7 @@ def fast_cartridge(*, regime: dict) -> dict:
             "senkou_b": FAST_PARAMS.senkou_b,
             "displacement": FAST_PARAMS.displacement,
         },
-        "entry_rules": {
+        "entry_rules": entry_rules or {
             "mode": "always_on",
             "allowed_sides": ["long", "short"],
             "require_close_vs_cloud": "above_for_long_below_for_short",
@@ -315,7 +424,7 @@ def fast_cartridge(*, regime: dict) -> dict:
             "require_chikou_confirmation": True,
             "chikou_mode": "close",
         },
-        "exit_rules": {
+        "exit_rules": exit_rules or {
             "mode": "bias_flip",
             "close_on_flat": True,
             "close_on_opposite": True,
@@ -331,6 +440,26 @@ def fast_cartridge(*, regime: dict) -> dict:
         },
         "sources": ["tests/test_eval_harness.py"],
     }
+
+
+def tk_cloud_strong_cartridge() -> dict:
+    return fast_cartridge(
+        regime={"type": "none", "params": {}},
+        entry_rules={
+            "mode": "tk_cloud_bias",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "tk_cross_only",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+        },
+        exit_rules={
+            "mode": "flat_on_rule_fail",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        },
+    )
 
 
 def run_cli(argv):
