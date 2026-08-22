@@ -46,7 +46,8 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 3. [x] First `runtime/runner` supervised paper loop — human trigger only; reads futures-paper status/positions, calls `admit()`, writes JSONL, and invokes only `kraken futures paper buy|sell` after allow.
 4. `runtime/scribe` — daily one-pager from JSONL (template already exists).
 5. No systemd runner yet. Any future user units require a separate explicit design/review; this loop remains human-triggered.
-6. Kill drills A–C automated once.
+6. [x] Kill-drill CLI wiring for A/B/C: soft, hard cancel/flatten, heartbeat,
+   and one-shot dead-man check. No background daemon yet.
 
 Exit: CoS can request a tiny supervised paper action end-to-end with traces; cold kill drill passes.
 
