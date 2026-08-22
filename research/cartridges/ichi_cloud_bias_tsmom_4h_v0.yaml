@@ -1,0 +1,39 @@
+id: ichi_cloud_bias_tsmom_4h_v0
+title: Cloud bias TSMOM decisions on 4h bars
+status: draft
+thesis: Prior thin-spine TSMOM keeps decided on 1h bars under 4h regime labels. Signal at the regime TF instead - cloud-side bias computed and traded on stored 4h OHLCV under the same thin Phase-2 hard veto (1d HTF + kumo width ON; ADX/dwell OFF) - so entry/exit flip on 4h closes, not 1h churn under lagged 4h permissioning.
+symbol: PF_XBTUSD
+tf: 4h
+baseline_ref: ichi_v0_baseline
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: cloud_bias
+  allowed_sides: [long, short]
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: none
+  require_chikou_confirmation: false
+  chikou_mode: close
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 40000
+  min_trades: 12
+  must_beat_baseline: true
+  baseline_metric: atr_normalized_total_return
+  notes: Eval MUST use --tf 4h. Thin spine --regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7 --atr-period 14. Forced 70/30. Beat same-flag 4h ichi_v0_baseline ATR-norm on IS and OOS (each >= min_trades). Require stored 4h.jsonl; no 1h fallback. Track A honesty later. New id only.
+sources:
+  - docs/REGIME.md
+  - research/cartridges/ichi_cloud_bias_tsmom_thin_v0.yaml
+  - runtime/market/symbols.py
+  - research/cartridges/SCHEMA.md
+notes: Champion lineage cloud_bias TSMOM on 4h bars. No width/ADX/dwell/exit polish; no TK-strong; no kumo_break; no pullbacks.

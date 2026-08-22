@@ -25,6 +25,7 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_always_on_tsmom_thin_v0",
                 "ichi_chikou_open_space_v0",
                 "ichi_cloud_thickness_v0",
+                "ichi_cloud_bias_tsmom_4h_v0",
                 "ichi_cloud_bias_tsmom_thin_v0",
                 "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
@@ -84,7 +85,10 @@ class ResearchCartridgeTests(TestCase):
                     self.assertEqual("PF_ETHUSD", cartridge["symbol"])
                 else:
                     self.assertEqual("PF_XBTUSD", cartridge["symbol"])
-                self.assertEqual("1h", cartridge["tf"])
+                if cartridge["id"] == "ichi_cloud_bias_tsmom_4h_v0":
+                    self.assertEqual("4h", cartridge["tf"])
+                else:
+                    self.assertEqual("1h", cartridge["tf"])
                 self.assertIn(
                     cartridge["baseline_ref"],
                     {
@@ -429,6 +433,23 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("120.35", cloud_bias["notes"])
         self.assertIn("190.88", cloud_bias["notes"])
         self.assertIn("trades 362 versus 338", cloud_bias["kill_criteria"]["notes"])
+
+    def test_one_shot_four_hour_cloud_bias_draft_loads_requested_contract(self):
+        cartridge = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_bias_tsmom_4h_v0.yaml")
+
+        self.assertEqual("draft", cartridge["status"])
+        self.assertEqual("PF_XBTUSD", cartridge["symbol"])
+        self.assertEqual("4h", cartridge["tf"])
+        self.assertEqual("ichi_v0_baseline", cartridge["baseline_ref"])
+        self.assertEqual("cloud_bias", cartridge["entry_rules"]["mode"])
+        self.assertEqual(["long", "short"], cartridge["entry_rules"]["allowed_sides"])
+        self.assertEqual("none", cartridge["entry_rules"]["require_tk_state"])
+        self.assertFalse(cartridge["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
+        self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
+        self.assertEqual(12, cartridge["kill_criteria"]["min_trades"])
+        self.assertIn("Eval MUST use --tf 4h", cartridge["kill_criteria"]["notes"])
+        self.assertIn("Require stored 4h.jsonl; no 1h fallback", cartridge["kill_criteria"]["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")

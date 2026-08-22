@@ -18,7 +18,7 @@ Default venue context:
 | `status` | enum | yes | `draft`, `queued`, `tested`, `killed`, `kept`, `champion_control`, or `scarred_control`. |
 | `thesis` | string | yes | One short paragraph describing the hypothesis. |
 | `symbol` | string | yes | Default `PF_XBTUSD`; other Kraken futures-paper symbols require CoS review. |
-| `tf` | string | yes | Default `1h`; should match stored OHLCV timeframes. |
+| `tf` | string | yes | Default `1h`; should match stored OHLCV timeframes. Explicit eval experiments may use supported non-default frames such as `4h` only when that stored OHLCV exists. |
 | `baseline_ref` | string | yes | Default `ichimoku_v0`. |
 | `ichimoku` | object | yes | Contains positive integer `tenkan`, `kijun`, `senkou_b`, and `displacement`. |
 | `entry_rules` | object | yes | Structured rule vocabulary; see below. |
