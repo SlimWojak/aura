@@ -1,16 +1,15 @@
-"""Naive paper-only backtest harness for Ichimoku v0 bias.
+"""Paper-only backtest harness for Ichimoku v0 bias.
 
-This module is intentionally thin: it reuses ``runtime.brain.ichimoku`` for all
+This module is intentionally thin: it reuses ``runtime.brain.ichimoku`` for
 indicator math and never calls Kraken, systemd, or any constellation path.
 
 Lookahead note
 --------------
-For each evaluated candle index, the signal is computed from
-``candles[: index + 1]`` only. The brain's displaced cloud values come from raw
-Tenkan/Kijun/Senkou values calculated 26 bars in the past, and the Chikou rule
-compares the current close to ``close[t-26]`` as implemented in
-``runtime.brain.ichimoku``. The backtest therefore does not use future candles
-for signal formation. The only future price used is the deliberately naive
+The fast path computes one full Ichimoku series and then indexes the signal for
+each evaluated candle. This preserves the no-lookahead rule because the brain's
+displaced cloud values at bar ``t`` come from raw Tenkan/Kijun/Senkou values
+calculated 26 bars in the past, and the Chikou rule compares the current close
+to ``close[t-26]``. The only future price used is the deliberately naive
 execution assumption: decisions at bar ``t`` execute at bar ``t+1`` open when
 available, otherwise at bar ``t`` close.
 """
@@ -21,7 +20,7 @@ from datetime import UTC, datetime
 from math import isfinite
 from pathlib import Path
 import json
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
@@ -36,9 +35,12 @@ MODEL_DESCRIPTION = (
     "next-bar-open execution when available else current close, no leverage, "
     "no fees, no slippage"
 )
+FAST_ENGINE = "precomputed_ichimoku_series_v1"
+REFERENCE_ENGINE = "reference_slice_recompute_v1"
 
 _DIRECTION_BY_BIAS: dict[Bias, int] = {"long": 1, "short": -1, "flat": 0}
 _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
+_SignalProvider = Callable[[int], IchimokuSignal]
 
 
 def run_backtest(
@@ -65,20 +67,121 @@ def run_backtest(
     safe_tf = validate_tf(tf)
     resolved_params = params if params is not None else IchimokuParams()
     resolved_min_bars = min_bars if min_bars is not None else resolved_params.minimum_candles
-    if resolved_min_bars <= 0:
+    normalized = _prepare_candles(
+        candles,
+        min_bars=resolved_min_bars,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        params=resolved_params,
+    )
+    if isinstance(normalized, dict):
+        return normalized
+
+    series = compute_ichimoku(normalized, params=resolved_params)
+    return _score_backtest(
+        normalized,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        params=resolved_params,
+        min_bars=resolved_min_bars,
+        engine=FAST_ENGINE,
+        lookahead_note=(
+            "Signals are indexed from one precomputed Ichimoku series. "
+            "Displaced spans use past raw Ichimoku values, and Chikou compares "
+            "current close to close[t-26] per runtime.brain.ichimoku. Execution "
+            "uses next open when available, else current close."
+        ),
+        signal_provider=lambda index: signal_from_series(series, index=index),
+    )
+
+
+def run_backtest_reference(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    symbol: str,
+    tf: str,
+    params: IchimokuParams | None = None,
+    min_bars: int | None = None,
+) -> dict[str, Any]:
+    """Reference implementation that recomputes Ichimoku from each prefix.
+
+    This intentionally keeps the old O(n^2)-shaped signal path available for
+    tests that prove the precomputed fast path produces matching decisions.
+    """
+
+    safe_symbol = validate_symbol(symbol)
+    safe_tf = validate_tf(tf)
+    resolved_params = params if params is not None else IchimokuParams()
+    resolved_min_bars = min_bars if min_bars is not None else resolved_params.minimum_candles
+    normalized = _prepare_candles(
+        candles,
+        min_bars=resolved_min_bars,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        params=resolved_params,
+    )
+    if isinstance(normalized, dict):
+        return normalized
+
+    return _score_backtest(
+        normalized,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        params=resolved_params,
+        min_bars=resolved_min_bars,
+        engine=REFERENCE_ENGINE,
+        lookahead_note=(
+            "Signals are recomputed from candles[:index+1]. Displaced spans use "
+            "past raw Ichimoku values, and Chikou compares current close to "
+            "close[t-26] per runtime.brain.ichimoku. Execution uses next open "
+            "when available, else current close."
+        ),
+        signal_provider=lambda index: signal_for_closed_bar(
+            normalized,
+            index=index,
+            params=resolved_params,
+        ),
+    )
+
+
+def _prepare_candles(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    min_bars: int,
+    symbol: str,
+    tf: str,
+    params: IchimokuParams,
+) -> list[dict[str, float | int | None]] | dict[str, Any]:
+    if min_bars <= 0:
         raise ValueError("min_bars must be positive")
 
     normalized = [_normalize_candle(index, candle) for index, candle in enumerate(candles)]
-    if len(normalized) < resolved_min_bars:
+    if len(normalized) < min_bars:
         return _insufficient_history_report(
-            symbol=safe_symbol,
-            tf=safe_tf,
+            symbol=symbol,
+            tf=tf,
             candle_count=len(normalized),
-            min_bars=resolved_min_bars,
-            params=resolved_params,
+            min_bars=min_bars,
+            params=params,
         )
+    return normalized
 
-    start_index = resolved_min_bars - 1
+
+def _score_backtest(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    symbol: str,
+    tf: str,
+    params: IchimokuParams,
+    min_bars: int,
+    engine: str,
+    lookahead_note: str,
+    signal_provider: _SignalProvider,
+) -> dict[str, Any]:
+    if min_bars <= 0:
+        raise ValueError("min_bars must be positive")
+
+    start_index = min_bars - 1
     bias_counts: dict[str, int] = {"long": 0, "short": 0, "flat": 0}
     signal_trace: list[dict[str, Any]] = []
     trades: list[dict[str, Any]] = []
@@ -89,16 +192,16 @@ def run_backtest(
     final_bias: Bias = "flat"
     position: dict[str, Any] | None = None
 
-    for index in range(start_index, len(normalized)):
-        signal = signal_for_closed_bar(candles, index=index, params=resolved_params)
+    for index in range(start_index, len(candles)):
+        signal = signal_provider(index)
         final_bias = signal.bias
         bias_counts[signal.bias] += 1
         desired_direction = _DIRECTION_BY_BIAS[signal.bias]
-        execution = _execution(normalized, index)
+        execution = _execution(candles, index)
         signal_trace.append(
             {
                 "index": index,
-                "ts_ms": normalized[index]["ts_ms"],
+                "ts_ms": candles[index]["ts_ms"],
                 "ok": signal.ok,
                 "reason": signal.reason,
                 "bias": signal.bias,
@@ -133,7 +236,7 @@ def run_backtest(
             if int(position["entry_index"]) <= index:
                 marked_equity_points = equity_points + _unrealized_pnl(
                     position=position,
-                    mark_price=float(normalized[index]["close"]),
+                    mark_price=float(candles[index]["close"]),
                 )
                 peak_equity_points = max(peak_equity_points, marked_equity_points)
                 max_drawdown_points = max(
@@ -141,11 +244,11 @@ def run_backtest(
                     peak_equity_points - marked_equity_points,
                 )
 
-    if position is not None and normalized:
+    if position is not None and candles:
         final_execution = {
-            "index": len(normalized) - 1,
-            "ts_ms": normalized[-1]["ts_ms"],
-            "price": normalized[-1]["close"],
+            "index": len(candles) - 1,
+            "ts_ms": candles[-1]["ts_ms"],
+            "price": candles[-1]["close"],
             "basis": "final_close",
         }
         trade = _close_trade(
@@ -166,21 +269,17 @@ def run_backtest(
         "schema": BACKTEST_REPORT_SCHEMA,
         "ok": True,
         "generated_at": utc_now_iso(),
-        "symbol": safe_symbol,
-        "tf": safe_tf,
-        "candle_count": len(normalized),
+        "symbol": symbol,
+        "tf": tf,
+        "candle_count": len(candles),
         "evaluated_bars": evaluated_bars,
-        "min_bars": resolved_min_bars,
-        "params": resolved_params.to_dict(),
+        "min_bars": min_bars,
+        "params": params.to_dict(),
         "fee_assumption": FEE_ASSUMPTION,
         "naive": True,
         "model": MODEL_DESCRIPTION,
-        "lookahead_note": (
-            "Signals are recomputed from candles[:index+1]. Displaced spans use "
-            "past raw Ichimoku values, and Chikou compares current close to "
-            "close[t-26] per runtime.brain.ichimoku. Execution uses next open "
-            "when available, else current close."
-        ),
+        "engine": engine,
+        "lookahead_note": lookahead_note,
         "metrics": {
             "trade_count": trade_count,
             "win_rate": (winning_trades / trade_count) if trade_count else 0.0,
@@ -203,15 +302,44 @@ def backtest_from_store(
     tf: str,
     aura_root: str | Path | None = None,
     min_bars: int | None = None,
+    max_bars: int | None = None,
+    since_ts_ms: int | None = None,
 ) -> dict[str, Any]:
     """Read stored OHLCV and return a backtest report."""
 
     safe_symbol = validate_symbol(symbol)
     safe_tf = validate_tf(tf)
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
-    report = run_backtest(candles, symbol=safe_symbol, tf=safe_tf, min_bars=min_bars)
+    windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    report = run_backtest(windowed_candles, symbol=safe_symbol, tf=safe_tf, min_bars=min_bars)
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
+    report["source_candle_count"] = len(candles)
+    report["window"] = {
+        "since_ts_ms": since_ts_ms,
+        "max_bars": max_bars,
+        "first_ts_ms": _candle_ts_ms(windowed_candles[0]) if windowed_candles else None,
+        "last_ts_ms": _candle_ts_ms(windowed_candles[-1]) if windowed_candles else None,
+    }
     return report
+
+
+def _window_candles(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    max_bars: int | None,
+    since_ts_ms: int | None,
+) -> list[Mapping[str, Any]]:
+    if max_bars is not None and max_bars <= 0:
+        raise ValueError("max_bars must be positive")
+    if since_ts_ms is not None and since_ts_ms <= 0:
+        raise ValueError("since_ts_ms must be a positive unix millisecond timestamp")
+
+    filtered = list(candles)
+    if since_ts_ms is not None:
+        filtered = [candle for candle in filtered if _candle_ts_ms(candle) >= since_ts_ms]
+    if max_bars is not None:
+        filtered = filtered[-max_bars:]
+    return filtered
 
 
 def signal_for_closed_bar(
@@ -384,6 +512,16 @@ def _optional_int(raw_value: Any) -> int | None:
         return int(raw_value)
     except (TypeError, ValueError) as exc:
         raise ValueError("candle ts_ms must be an integer when present") from exc
+
+
+def _candle_ts_ms(candle: Mapping[str, Any]) -> int:
+    raw_value = candle.get("ts_ms")
+    if raw_value in (None, ""):
+        raise ValueError("candle ts_ms is required for backtest windowing")
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("candle ts_ms must be an integer") from exc
 
 
 def _stable_float(value: float) -> float:
