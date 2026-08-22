@@ -54,6 +54,17 @@ ENTRY_FIELDS = {
     "require_tk_state",
     "require_chikou_confirmation",
     "chikou_mode",
+    "require_kijun_dip_setup",
+    "require_cloud_color_align",
+    "setup_bars",
+}
+REQUIRED_ENTRY_FIELDS = {
+    "mode",
+    "allowed_sides",
+    "require_close_vs_cloud",
+    "require_tk_state",
+    "require_chikou_confirmation",
+    "chikou_mode",
 }
 EXIT_FIELDS = {"mode", "close_on_flat", "close_on_opposite", "max_bars_in_trade"}
 REGIME_FIELDS = {"type", "params"}
@@ -112,7 +123,7 @@ def validate_cartridge(
         _require_positive_int(ichimoku, field, f"{label}: ichimoku")
 
     entry_rules = _require_mapping(cartridge, "entry_rules", label)
-    _require_fields(entry_rules, ENTRY_FIELDS, f"{label}: entry_rules")
+    _require_fields(entry_rules, REQUIRED_ENTRY_FIELDS, f"{label}: entry_rules")
     _reject_unknown_fields(entry_rules, ENTRY_FIELDS, f"{label}: entry_rules")
     _require_enum(entry_rules, "mode", ENTRY_MODES, f"{label}: entry_rules")
     _require_enum(
@@ -130,6 +141,12 @@ def validate_cartridge(
     for side in allowed_sides:
         if side not in SIDES:
             raise ValueError(f"{label}: unsupported entry side {side!r}")
+    if "require_kijun_dip_setup" in entry_rules:
+        _require_bool(entry_rules, "require_kijun_dip_setup", f"{label}: entry_rules")
+    if "require_cloud_color_align" in entry_rules:
+        _require_bool(entry_rules, "require_cloud_color_align", f"{label}: entry_rules")
+    if "setup_bars" in entry_rules:
+        _require_positive_int(entry_rules, "setup_bars", f"{label}: entry_rules")
 
     exit_rules = _require_mapping(cartridge, "exit_rules", label)
     _require_fields(exit_rules, EXIT_FIELDS, f"{label}: exit_rules")

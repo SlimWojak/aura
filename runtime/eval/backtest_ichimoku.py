@@ -49,6 +49,9 @@ _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
 _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
 _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_tk_strong_trend_only_v0",
+    "ichi_tk_strong_trend_oos_v0",
+    "ichi_tk_strong_trend_kijun_dip_v0",
+    "ichi_tk_strong_trend_cloud_color_v0",
     "ichi_kijun_bounce_trend_v0",
 }
 _SignalProvider = Callable[[int], IchimokuSignal]
@@ -337,6 +340,8 @@ def _score_backtest(
                 "execution_index": execution["index"],
                 "execution_price": _stable_float(execution["price"]),
                 "execution_basis": execution["basis"],
+                "components": _stable_mapping_values(signal.components),
+                "features": dict(signal.features),
             }
         )
         if entry_gate_provider is not None or allowed_entry_sides is not None:
@@ -533,6 +538,210 @@ def cartridge_backtest_from_store(
     return report
 
 
+def cartridge_oos_backtest_from_store(
+    *,
+    cartridge_id: str | None = None,
+    cartridge_path: str | Path | None = None,
+    symbol: str | None = None,
+    tf: str | None = None,
+    aura_root: str | Path | None = None,
+    min_bars: int | None = None,
+    max_bars: int | None = None,
+    since_ts_ms: int | None = None,
+    cartridge_root: str | Path = CARTRIDGE_ROOT,
+    fee_bps: float = 0.0,
+    regime_tf: str | None = None,
+    regime_htf: str | None = None,
+    oos_split: float = 0.7,
+) -> dict[str, Any]:
+    """Read stored OHLCV and return a chronological IS/OOS cartridge bake-off."""
+
+    split_fraction = _split_fraction(oos_split)
+    cartridge = resolve_cartridge(
+        cartridge_id=cartridge_id,
+        cartridge_path=cartridge_path,
+        cartridge_root=cartridge_root,
+    )
+    unsupported = unsupported_cartridge_reasons(cartridge)
+    if unsupported:
+        raise NotImplementedError(
+            f"cartridge {cartridge.get('id', '<unknown>')} is not runnable: "
+            + "; ".join(unsupported)
+        )
+    safe_symbol = validate_symbol(symbol if symbol is not None else str(cartridge["symbol"]))
+    safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
+    candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
+    windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    report = run_cartridge_oos_split(
+        windowed_candles,
+        cartridge=cartridge,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
+        oos_split=split_fraction,
+        cartridge_root=cartridge_root,
+    )
+    report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
+    report["source_candle_count"] = len(candles)
+    report["window"] = {
+        "since_ts_ms": since_ts_ms,
+        "max_bars": max_bars,
+        "first_ts_ms": _candle_ts_ms(windowed_candles[0]) if windowed_candles else None,
+        "last_ts_ms": _candle_ts_ms(windowed_candles[-1]) if windowed_candles else None,
+    }
+    return report
+
+
+def run_cartridge_oos_split(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    cartridge: Mapping[str, Any],
+    symbol: str | None = None,
+    tf: str | None = None,
+    min_bars: int | None = None,
+    fee_bps: float = 0.0,
+    regime_tf: str | None = None,
+    regime_htf: str | None = None,
+    oos_split: float = 0.7,
+    cartridge_root: str | Path = CARTRIDGE_ROOT,
+) -> dict[str, Any]:
+    """Run a pre-registered chronological IS/OOS cartridge bake-off."""
+
+    split_fraction = _split_fraction(oos_split)
+    safe_symbol = validate_symbol(symbol if symbol is not None else str(cartridge["symbol"]))
+    safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
+    split_index = _chronological_split_index(len(candles), split_fraction)
+    is_candles = list(candles[:split_index])
+    oos_candles = list(candles[split_index:])
+    candidate_is = run_backtest_cartridge(
+        is_candles,
+        cartridge=cartridge,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
+    )
+    candidate_oos = run_backtest_cartridge(
+        oos_candles,
+        cartridge=cartridge,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
+    )
+    baseline_is = _run_baseline_backtest(
+        is_candles,
+        cartridge=cartridge,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
+        cartridge_root=cartridge_root,
+    )
+    baseline_oos = _run_baseline_backtest(
+        oos_candles,
+        cartridge=cartridge,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
+        cartridge_root=cartridge_root,
+    )
+    kill_criteria = _mapping(cartridge, "kill_criteria")
+    metric_name = str(kill_criteria["baseline_metric"])
+    min_trades = int(kill_criteria["min_trades"])
+    max_dd_points = float(kill_criteria["max_dd_points"])
+    must_beat_baseline = bool(kill_criteria["must_beat_baseline"])
+    is_gate = _oos_half_gate(
+        candidate=candidate_is,
+        baseline=baseline_is,
+        metric_name=metric_name,
+        min_trades=min_trades,
+        max_dd_points=max_dd_points,
+        must_beat_baseline=must_beat_baseline,
+    )
+    oos_gate = _oos_half_gate(
+        candidate=candidate_oos,
+        baseline=baseline_oos,
+        metric_name=metric_name,
+        min_trades=min_trades,
+        max_dd_points=max_dd_points,
+        must_beat_baseline=must_beat_baseline,
+    )
+    pass_oos_gate = bool(is_gate["passed"] and oos_gate["passed"])
+    params = _params_from_cartridge(cartridge)
+    report = {
+        "schema": BACKTEST_REPORT_SCHEMA,
+        "ok": bool(
+            candidate_is.get("ok")
+            and candidate_oos.get("ok")
+            and baseline_is.get("ok")
+            and baseline_oos.get("ok")
+        ),
+        "generated_at": utc_now_iso(),
+        "symbol": safe_symbol,
+        "tf": safe_tf,
+        "candle_count": len(candles),
+        "evaluated_bars": int(candidate_is["evaluated_bars"]) + int(candidate_oos["evaluated_bars"]),
+        "min_bars": min_bars if min_bars is not None else params.minimum_candles,
+        "params": params.to_dict(),
+        "fee_bps": _stable_float(_nonnegative_float(fee_bps, "fee_bps")),
+        "fee_assumption": FEE_ASSUMPTION,
+        "fee_model": FEE_MODEL,
+        "naive": True,
+        "model": MODEL_DESCRIPTION,
+        "engine": f"{CARTRIDGE_ENGINE}_oos_split_v1",
+        "lookahead_note": (
+            "Chronological IS/OOS bake-off. Split fraction is pre-registered "
+            "before scoring; candidate and baseline are scored separately on "
+            "the first in-sample slice and final out-of-sample slice."
+        ),
+        "metrics": {
+            "is": candidate_is["metrics"],
+            "oos": candidate_oos["metrics"],
+        },
+        "oos_split": {
+            "enabled": True,
+            "is_fraction": _stable_float(split_fraction),
+            "oos_fraction": _stable_float(1.0 - split_fraction),
+            "split_index": split_index,
+            "is_candle_count": len(is_candles),
+            "oos_candle_count": len(oos_candles),
+            "baseline_ref": str(cartridge["baseline_ref"]),
+            "baseline_metric": metric_name,
+            "min_trades_per_half": min_trades,
+            "must_beat_baseline": must_beat_baseline,
+            "pass_oos_gate": pass_oos_gate,
+            "is_gate": is_gate,
+            "oos_gate": oos_gate,
+        },
+        "is": candidate_is,
+        "oos": candidate_oos,
+        "baseline": {
+            "ref": str(cartridge["baseline_ref"]),
+            "is": baseline_is,
+            "oos": baseline_oos,
+        },
+    }
+    if "regime_gate" in candidate_is or "regime_gate" in candidate_oos:
+        report["regime_gate"] = candidate_is.get("regime_gate", candidate_oos.get("regime_gate"))
+    if not report["ok"]:
+        report["reason"] = "one_or_more_oos_split_reports_failed"
+    _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
+    return report
+
+
 def resolve_cartridge(
     *,
     cartridge_id: str | None = None,
@@ -626,6 +835,28 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
     if entry_rules["chikou_mode"] not in {"close", "strict"}:
         reasons.append(f"entry_rules.chikou_mode={entry_rules['chikou_mode']!r} is not wired")
+    if "require_kijun_dip_setup" in entry_rules and not isinstance(
+        entry_rules["require_kijun_dip_setup"],
+        bool,
+    ):
+        reasons.append("entry_rules.require_kijun_dip_setup must be boolean")
+    if "require_cloud_color_align" in entry_rules and not isinstance(
+        entry_rules["require_cloud_color_align"],
+        bool,
+    ):
+        reasons.append("entry_rules.require_cloud_color_align must be boolean")
+    if "setup_bars" in entry_rules:
+        setup_bars = entry_rules["setup_bars"]
+        if not isinstance(setup_bars, int) or isinstance(setup_bars, bool) or setup_bars <= 0:
+            reasons.append("entry_rules.setup_bars must be a positive integer")
+    if bool(entry_rules.get("require_kijun_dip_setup", False)) and "setup_bars" not in entry_rules:
+        reasons.append("entry_rules.setup_bars is required when require_kijun_dip_setup=true")
+    if not is_tk_cloud_strong and (
+        bool(entry_rules.get("require_kijun_dip_setup", False))
+        or bool(entry_rules.get("require_cloud_color_align", False))
+        or "setup_bars" in entry_rules
+    ):
+        reasons.append("TK-strong refinement entry flags are only wired for tk_cloud_bias")
     if is_always_on and exit_mode != "bias_flip":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_tk_cloud_strong and exit_mode != "flat_on_rule_fail":
@@ -915,6 +1146,114 @@ def _cartridge_requires_phase2_regime(cartridge: Mapping[str, Any]) -> bool:
     return str(cartridge.get("id", "")) in _PHASE2_REGIME_REQUIRED_CARTRIDGES
 
 
+def _run_baseline_backtest(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    cartridge: Mapping[str, Any],
+    symbol: str,
+    tf: str,
+    min_bars: int | None,
+    fee_bps: float,
+    regime_tf: str | None,
+    regime_htf: str | None,
+    cartridge_root: str | Path,
+) -> dict[str, Any]:
+    baseline_ref = str(cartridge["baseline_ref"])
+    if baseline_ref in {"ichimoku_v0", "ichi_v0_baseline"}:
+        return run_backtest(
+            candles,
+            symbol=symbol,
+            tf=tf,
+            min_bars=min_bars,
+            fee_bps=fee_bps,
+        )
+
+    baseline_cartridge = resolve_cartridge(
+        cartridge_id=baseline_ref,
+        cartridge_root=cartridge_root,
+    )
+    baseline_regime_tf = regime_tf if _cartridge_requires_phase2_regime(baseline_cartridge) else None
+    baseline_regime_htf = regime_htf if baseline_regime_tf is not None else None
+    return run_backtest_cartridge(
+        candles,
+        cartridge=baseline_cartridge,
+        symbol=symbol,
+        tf=tf,
+        min_bars=min_bars,
+        fee_bps=fee_bps,
+        regime_tf=baseline_regime_tf,
+        regime_htf=baseline_regime_htf,
+    )
+
+
+def _oos_half_gate(
+    *,
+    candidate: Mapping[str, Any],
+    baseline: Mapping[str, Any],
+    metric_name: str,
+    min_trades: int,
+    max_dd_points: float,
+    must_beat_baseline: bool,
+) -> dict[str, Any]:
+    candidate_metric = _metric_value(candidate, metric_name)
+    baseline_metric = _metric_value(baseline, metric_name)
+    trade_count = int(_mapping(candidate, "metrics")["trade_count"])
+    max_drawdown_points = float(_mapping(candidate, "metrics")["max_drawdown_points"])
+    min_trades_ok = trade_count >= min_trades
+    max_dd_ok = max_drawdown_points <= max_dd_points
+    beat_baseline = (
+        _beats_baseline(metric_name, candidate_metric, baseline_metric)
+        if must_beat_baseline
+        else True
+    )
+    report_ok = bool(candidate.get("ok")) and bool(baseline.get("ok"))
+    return {
+        "passed": bool(report_ok and min_trades_ok and max_dd_ok and beat_baseline),
+        "report_ok": report_ok,
+        "metric": metric_name,
+        "candidate_metric": _stable_float(candidate_metric),
+        "baseline_metric": _stable_float(baseline_metric),
+        "beat_baseline": beat_baseline,
+        "trade_count": trade_count,
+        "min_trades": min_trades,
+        "min_trades_ok": min_trades_ok,
+        "max_drawdown_points": _stable_float(max_drawdown_points),
+        "max_dd_points": _stable_float(max_dd_points),
+        "max_dd_ok": max_dd_ok,
+    }
+
+
+def _metric_value(report: Mapping[str, Any], metric_name: str) -> float:
+    metrics = _mapping(report, "metrics")
+    if metric_name in metrics:
+        return float(metrics[metric_name])
+    if metric_name == "total_pnl_points_after_fees" and "total_pnl_points" in metrics:
+        return float(metrics["total_pnl_points"])
+    raise ValueError(f"metric {metric_name!r} is not available in report")
+
+
+def _beats_baseline(metric_name: str, candidate_metric: float, baseline_metric: float) -> bool:
+    if metric_name == "max_drawdown_points":
+        return candidate_metric < baseline_metric
+    return candidate_metric > baseline_metric
+
+
+def _split_fraction(value: float) -> float:
+    fraction = _nonnegative_float(value, "oos_split")
+    if fraction <= 0.0 or fraction >= 1.0:
+        raise ValueError("--oos-split must be greater than 0 and less than 1")
+    return fraction
+
+
+def _chronological_split_index(candle_count: int, split_fraction: float) -> int:
+    split_index = int(candle_count * split_fraction)
+    if split_index <= 0 or split_index >= candle_count:
+        raise ValueError(
+            "oos split must leave at least one candle in both in-sample and out-of-sample halves"
+        )
+    return split_index
+
+
 def _signal_provider_for_cartridge(
     series: Any,
     *,
@@ -932,13 +1271,26 @@ def _signal_provider_for_cartridge(
         entry_rules["mode"] == "tk_cloud_bias"
         and entry_rules["require_tk_state"] == "tk_cross_only"
     ):
-        return lambda index: _tk_cloud_strong_signal_from_series(series, index=index)
+        return lambda index: _tk_cloud_strong_signal_from_series(
+            series,
+            index=index,
+            require_kijun_dip_setup=bool(entry_rules.get("require_kijun_dip_setup", False)),
+            setup_bars=entry_rules.get("setup_bars"),
+            require_cloud_color_align=bool(entry_rules.get("require_cloud_color_align", False)),
+        )
     if entry_rules["mode"] == "kijun_bounce":
         return lambda index: _kijun_bounce_signal_from_series(series, index=index)
     raise NotImplementedError(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
 
 
-def _tk_cloud_strong_signal_from_series(series: Any, *, index: int) -> IchimokuSignal:
+def _tk_cloud_strong_signal_from_series(
+    series: Any,
+    *,
+    index: int,
+    require_kijun_dip_setup: bool = False,
+    setup_bars: Any = None,
+    require_cloud_color_align: bool = False,
+) -> IchimokuSignal:
     if not series.points:
         return _empty_signal(series.params, "no_candles")
     if not series.ok:
@@ -971,6 +1323,28 @@ def _tk_cloud_strong_signal_from_series(series: Any, *, index: int) -> IchimokuS
 
     tk_bull_cross = previous_tenkan <= previous_kijun and tenkan > kijun
     tk_bear_cross = previous_tenkan >= previous_kijun and tenkan < kijun
+    setup_window_bars = _positive_int(setup_bars, "entry_rules.setup_bars") if setup_bars is not None else 0
+    kijun_dip_setup_long = True
+    kijun_dip_setup_short = True
+    if require_kijun_dip_setup:
+        start_index = max(0, index - setup_window_bars)
+        setup_points = series.points[start_index:index]
+        kijun_dip_setup_long = any(
+            setup_point.tenkan is not None
+            and setup_point.kijun is not None
+            and setup_point.tenkan <= setup_point.kijun
+            for setup_point in setup_points
+        )
+        kijun_dip_setup_short = any(
+            setup_point.tenkan is not None
+            and setup_point.kijun is not None
+            and setup_point.tenkan >= setup_point.kijun
+            for setup_point in setup_points
+        )
+    cloud_color_bullish = span_a > span_b
+    cloud_color_bearish = span_a < span_b
+    cloud_color_long_ok = cloud_color_bullish if require_cloud_color_align else True
+    cloud_color_short_ok = cloud_color_bearish if require_cloud_color_align else True
     features = {
         "has_cloud": True,
         "tk_bull_cross": tk_bull_cross,
@@ -981,18 +1355,30 @@ def _tk_cloud_strong_signal_from_series(series: Any, *, index: int) -> IchimokuS
         "tenkan_below_cloud_bottom": tenkan < cloud_bottom,
         "kijun_below_cloud_bottom": kijun < cloud_bottom,
         "close_below_cloud": close < cloud_bottom,
+        "require_kijun_dip_setup": require_kijun_dip_setup,
+        "kijun_dip_setup_long": kijun_dip_setup_long,
+        "kijun_dip_setup_short": kijun_dip_setup_short,
+        "require_cloud_color_align": require_cloud_color_align,
+        "cloud_color_bullish": cloud_color_bullish,
+        "cloud_color_bearish": cloud_color_bearish,
+        "cloud_color_long_ok": cloud_color_long_ok,
+        "cloud_color_short_ok": cloud_color_short_ok,
     }
     features["bullish_rule"] = (
         features["tk_bull_cross"]
         and features["tenkan_above_cloud_top"]
         and features["kijun_above_cloud_top"]
         and features["close_above_cloud"]
+        and features["kijun_dip_setup_long"]
+        and features["cloud_color_long_ok"]
     )
     features["bearish_rule"] = (
         features["tk_bear_cross"]
         and features["tenkan_below_cloud_bottom"]
         and features["kijun_below_cloud_bottom"]
         and features["close_below_cloud"]
+        and features["kijun_dip_setup_short"]
+        and features["cloud_color_short_ok"]
     )
 
     bias: Bias = "flat"
@@ -1013,6 +1399,7 @@ def _tk_cloud_strong_signal_from_series(series: Any, *, index: int) -> IchimokuS
         "senkou_span_b_raw": point.senkou_span_b_raw,
         "senkou_span_a_displaced": span_a,
         "senkou_span_b_displaced": span_b,
+        "setup_bars": setup_window_bars if setup_bars is not None else None,
         "chikou_mode": "close",
     }
     return IchimokuSignal(

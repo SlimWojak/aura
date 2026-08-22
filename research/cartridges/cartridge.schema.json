@@ -93,6 +93,18 @@
         },
         "chikou_mode": {
           "enum": ["close", "strict"]
+        },
+        "require_kijun_dip_setup": {
+          "type": "boolean",
+          "default": false
+        },
+        "require_cloud_color_align": {
+          "type": "boolean",
+          "default": false
+        },
+        "setup_bars": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },

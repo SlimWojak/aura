@@ -24,6 +24,9 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_params_20_60_v0",
                 "ichi_params_20_60_er_v0",
                 "ichi_tk_cloud_strong_v0",
+                "ichi_tk_strong_trend_cloud_color_v0",
+                "ichi_tk_strong_trend_kijun_dip_v0",
+                "ichi_tk_strong_trend_oos_v0",
                 "ichi_tk_strong_trend_only_v0",
                 "ichi_tk_cloud_v0",
                 "ichi_v0_baseline",
@@ -35,7 +38,10 @@ class ResearchCartridgeTests(TestCase):
                 self.assertIn(cartridge["status"], {"draft", "queued", "killed"})
                 self.assertEqual("PF_XBTUSD", cartridge["symbol"])
                 self.assertEqual("1h", cartridge["tf"])
-                self.assertEqual("ichimoku_v0", cartridge["baseline_ref"])
+                self.assertIn(
+                    cartridge["baseline_ref"],
+                    {"ichimoku_v0", "ichi_tk_strong_trend_only_v0"},
+                )
                 self.assertEqual({"long", "short"}, set(cartridge["entry_rules"]["allowed_sides"]))
                 self.assertIn(cartridge["entry_rules"]["chikou_mode"], {"close", "strict"})
                 self.assertGreater(cartridge["kill_criteria"]["max_dd_points"], 0)
@@ -65,6 +71,9 @@ class ResearchCartridgeTests(TestCase):
         slow_er = load_cartridge(CARTRIDGE_ROOT / "ichi_params_20_60_er_v0.yaml")
         tk_strong = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_cloud_strong_v0.yaml")
         trend_only = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_strong_trend_only_v0.yaml")
+        trend_oos = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_strong_trend_oos_v0.yaml")
+        kijun_dip = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_strong_trend_kijun_dip_v0.yaml")
+        cloud_color = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_strong_trend_cloud_color_v0.yaml")
         kijun_bounce = load_cartridge(CARTRIDGE_ROOT / "ichi_kijun_bounce_trend_v0.yaml")
 
         self.assertEqual("er", er["regime"]["type"])
@@ -78,6 +87,15 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("tk_cross_only", tk_strong["entry_rules"]["require_tk_state"])
         self.assertFalse(tk_strong["entry_rules"]["require_chikou_confirmation"])
         self.assertEqual("total_pnl_points_after_fees", trend_only["kill_criteria"]["baseline_metric"])
+        self.assertEqual("draft", trend_only["status"])
+        self.assertIn("OOS failed", trend_only["notes"])
+        self.assertIn("70/30", trend_oos["kill_criteria"]["notes"])
+        self.assertEqual("total_pnl_points_after_fees", trend_oos["kill_criteria"]["baseline_metric"])
+        self.assertTrue(kijun_dip["entry_rules"]["require_kijun_dip_setup"])
+        self.assertEqual(8, kijun_dip["entry_rules"]["setup_bars"])
+        self.assertEqual("ichi_tk_strong_trend_only_v0", kijun_dip["baseline_ref"])
+        self.assertTrue(cloud_color["entry_rules"]["require_cloud_color_align"])
+        self.assertEqual("ichi_tk_strong_trend_only_v0", cloud_color["baseline_ref"])
         self.assertEqual("kijun_bounce", kijun_bounce["entry_rules"]["mode"])
         self.assertEqual("none", kijun_bounce["entry_rules"]["require_tk_state"])
 

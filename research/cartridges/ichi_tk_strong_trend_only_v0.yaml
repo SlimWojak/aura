@@ -1,6 +1,6 @@
 id: ichi_tk_strong_trend_only_v0
 title: Strong TK cross with Phase 2 trend-only veto
-status: queued
+status: draft
 thesis: Re-run the strict TK-cloud cross only when Phase 2 regime permissioning agrees with the side, so long entries require TREND_BULL and short entries require TREND_BEAR.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,9 +32,9 @@ kill_criteria:
   min_trades: 25
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless fee-on Phase 2 gated results beat both fee-on ichi_v0_baseline and fee-on ungated ichi_tk_cloud_strong_v0.
+  notes: Not a keep. CoS OOS bake-off found the full-sample fee-on positive result was IS-driven; BTC OOS last 30 percent was fee-on negative and ETH was flat.
 sources:
   - docs/REGIME.md
   - research/cartridges/ichi_tk_cloud_strong_v0.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: Requires eval_run cartridge --regime-tf; the signal is identical to ichi_tk_cloud_strong_v0, while Phase 2 hard veto admits long only in TREND_BULL and short only in TREND_BEAR. Exits remain governed by cartridge exit rules.
+notes: OOS failed and parent is not a keep. Keep runnable only as the fee-on parent comparator for TK-strong refinement bake-offs. Requires eval_run cartridge --regime-tf; the signal is identical to ichi_tk_cloud_strong_v0, while Phase 2 hard veto admits long only in TREND_BULL and short only in TREND_BEAR.
