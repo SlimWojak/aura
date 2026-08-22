@@ -154,6 +154,53 @@ The kijun-bounce cartridge adds a paper eval entry mode:
   confirms;
 - short mirrors below kijun and the displaced kumo bottom.
 
+### Phase 2 ablation drafts
+
+Phase 2 ablations are explicit draft cartridges only; they do not weaken the
+default hard-veto spine and do not change supervised paper defaults. The eval
+harness recognizes optional `regime.params.phase2_ablation` metadata on these
+cartridges and maps it into classifier component switches. When the metadata is
+absent, existing cartridge behavior is unchanged.
+
+Run each cartridge on its declared symbol with forced 70/30 fee-on OOS and an
+honest trial count covering the whole ablation set:
+
+```bash
+python3.12 -m runtime.tools.eval_run cartridge \
+  --id <ablation_cartridge_id> \
+  --symbol <PF_XBTUSD-or-PF_ETHUSD> \
+  --tf 1h \
+  --fee-bps 4 \
+  --oos-split 0.7 \
+  --atr-period 14 \
+  --trial-count 12 \
+  --metrics-only
+```
+
+For every cartridge except AB-0, include the full Phase 2 CLI context:
+
+```bash
+  --regime-tf 4h --regime-htf 1d
+```
+
+AB-0 is the no-gate baseline. It has `phase2_ablation.enabled=false`, so it can
+be run without `--regime-tf`; if the regime flags are accidentally supplied, the
+cartridge metadata still disables the Phase 2 eval gate for that draft.
+
+| Ablation | PF_XBTUSD cartridge | PF_ETHUSD cartridge | Component delta |
+|---|---|---|---|
+| AB-0 | `ichi_p2_ab0_xbt_v0` | `ichi_p2_ab0_eth_v0` | No Phase 2 hard veto. |
+| AB-FULL | `ichi_p2_abfull_xbt_v0` | `ichi_p2_abfull_eth_v0` | ADX/DI, kumo width/ATR, 1d HTF veto, dwell/hysteresis all enabled. |
+| AB-noADX | `ichi_p2_abnoadx_xbt_v0` | `ichi_p2_abnoadx_eth_v0` | Disable only ADX/+DI/-DI. |
+| AB-noWidth | `ichi_p2_abnowidth_xbt_v0` | `ichi_p2_abnowidth_eth_v0` | Disable only kumo width / ATR filtering. |
+| AB-noHTF | `ichi_p2_abnohtf_xbt_v0` | `ichi_p2_abnohtf_eth_v0` | Disable only the 1d higher-timeframe veto. |
+| AB-noDwell | `ichi_p2_abnodwell_xbt_v0` | `ichi_p2_abnodwell_eth_v0` | Disable only dwell/hysteresis. |
+
+Report ATR-normalized metrics, especially ATR Calmar/MAR and DSR. A component
+earns its place only when removing it materially worsens ATR Calmar or DSR on
+both PF_XBTUSD and PF_ETHUSD versus AB-FULL. Count every ablation cartridge
+toward honest trial N even if a later memo only highlights a subset.
+
 ### Supervised paper
 
 The human-triggered supervised runner remains unchanged by default. Operators

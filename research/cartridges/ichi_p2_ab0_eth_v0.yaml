@@ -1,0 +1,49 @@
+id: ichi_p2_ab0_eth_v0
+title: Phase 2 ablation AB-0 ETH no-gate baseline
+status: draft
+thesis: Measure the 20/60/120/60 trend parent entry on PF_ETHUSD with no Phase 2 hard veto, so CoS can compare full and ablated regime gates against an ungated paper baseline.
+symbol: PF_ETHUSD
+tf: 1h
+baseline_ref: ichi_p2_abfull_eth_v0
+ichimoku:
+  tenkan: 20
+  kijun: 60
+  senkou_b: 120
+  displacement: 60
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+  chikou_mode: close
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params:
+    phase2_ablation:
+      enabled: false
+      label: AB-0
+      components:
+        adx_di: false
+        kumo_width_atr: false
+        htf_veto: false
+        dwell_hysteresis: false
+kill_criteria:
+  max_dd_points: 2000
+  min_trades: 12
+  must_beat_baseline: false
+  baseline_metric: atr_normalized_total_return
+  notes: "Draft ablation only. Run forced 70/30 fee-on OOS on PF_ETHUSD with --trial-count 12 and report ATR-normalized Calmar/MAR plus DSR. AB-0 is the no-gate reference; it does not weaken the production Phase 2 hard-veto spine."
+sources:
+  - docs/REGIME.md
+  - docs/EVAL.md
+  - research/cartridges/ichi_params_20_60_trend_v0.yaml
+  - runtime/eval/backtest_ichimoku.py
+notes: "Phase-2 ablation cartridge AB-0 for PF_ETHUSD. Same always_on 20/60/120/60 entry and bias_flip exit as the trend parent, but phase2_ablation.enabled=false explicitly disables the eval hard veto even if --regime-tf is passed. Count this cartridge toward honest trial N; do not mutate kept/killed statuses from this draft."

@@ -1,0 +1,49 @@
+id: ichi_p2_abnohtf_eth_v0
+title: Phase 2 ablation AB-noHTF ETH
+status: draft
+thesis: Remove only the 1d higher-timeframe veto from the PF_ETHUSD Phase 2 stack to test whether daily disagreement filtering improves out-of-sample quality.
+symbol: PF_ETHUSD
+tf: 1h
+baseline_ref: ichi_p2_abfull_eth_v0
+ichimoku:
+  tenkan: 20
+  kijun: 60
+  senkou_b: 120
+  displacement: 60
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+  chikou_mode: close
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params:
+    phase2_ablation:
+      enabled: true
+      label: AB-noHTF
+      components:
+        adx_di: true
+        kumo_width_atr: true
+        htf_veto: false
+        dwell_hysteresis: true
+kill_criteria:
+  max_dd_points: 2000
+  min_trades: 12
+  must_beat_baseline: false
+  baseline_metric: atr_normalized_total_return
+  notes: "Draft ablation only. Run forced 70/30 fee-on OOS on PF_ETHUSD with --regime-tf 4h --regime-htf 1d --trial-count 12. HTF veto earns its place only if this removal materially worsens ATR Calmar or DSR on both symbols versus AB-FULL."
+sources:
+  - docs/REGIME.md
+  - docs/EVAL.md
+  - research/cartridges/ichi_p2_abfull_eth_v0.yaml
+  - runtime/eval/backtest_ichimoku.py
+notes: "AB-noHTF for PF_ETHUSD disables only the 1d Phase 2 higher-timeframe veto; eval may still be invoked with --regime-htf 1d, but the cartridge-level component toggle makes the effective HTF null for this draft. Count toward honest trial N."
