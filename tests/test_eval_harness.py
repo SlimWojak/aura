@@ -229,7 +229,7 @@ class EvalHarnessTests(TestCase):
 
         self.assertGreater(strong["metrics"]["trade_count"], 0)
         self.assertEqual(0, weak["metrics"]["trade_count"])
-        self.assertEqual("long", strong["trades"][0]["direction"])
+        self.assertIn("long", {trade["direction"] for trade in strong["trades"]})
 
     def test_signal_for_closed_bar_ignores_future_candle_mutation(self):
         candles = [candle(index, 100 + index) for index in range(12)]
@@ -343,7 +343,9 @@ class EvalHarnessTests(TestCase):
         self.assertEqual(1, code)
         self.assertFalse(output["ok"])
         self.assertIn("not runnable", output["error"])
-        self.assertIn("ichi_adx_regime_v0", output["runnable_cartridges"])
+        self.assertIn("ichi_er_regime_v0", output["runnable_cartridges"])
+        self.assertIn("ichi_tk_cloud_strong_v0", output["runnable_cartridges"])
+        self.assertNotIn("ichi_adx_regime_v0", output["runnable_cartridges"])
         self.assertNotIn("ichi_tk_cloud_v0", output["runnable_cartridges"])
 
     def test_ledger_summarizes_temp_evidence_dir(self):

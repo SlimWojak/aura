@@ -963,6 +963,12 @@ def _nonnegative_float(value: Any, field_name: str) -> float:
     return float(value)
 
 
+def _required_float(value: float | None, field_name: str) -> float:
+    if value is None:
+        raise ValueError(f"{field_name} is required")
+    return float(value)
+
+
 def _stable_mapping_values(values: Mapping[str, Any]) -> dict[str, Any]:
     return {
         key: _stable_float(value) if isinstance(value, float) else value
