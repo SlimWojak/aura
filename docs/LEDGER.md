@@ -338,3 +338,28 @@ honesty rescore: `/var/aura/evidence/evals/r7-dsr-pbo-20260822/`.
 | 2026-08-22 | `ichi_params_20_60_trend_v0` | kept | scarred_control | Track A/R7 honesty makes the old keep a provisional-fail: BTC residual evidence remains useful as a control, but ETH, drawdown, DSR/PBO, and both-symbol baseline gates do not support runner status. |
 | 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | kept | scarred_control | R7 BTC-primary residual passed, but ETH lost to the thin baseline and PR #35 honesty still failed; retain as a scarred paper control only. |
 | 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | kept | champion_control | Best residual R7 ATR control: XBT and ETH beat thin baselines, but PR #35 honesty still failed, so this remains a benchmark/control only, not a runner and not live. |
+
+## 2026-08-22 Track A power-test DETECTABLE
+
+Paper-only CoS power-test bank for the Track A harness at HEAD
+`ae6d5b026ffa8b3ac19710e030b469e680f129e3` (PR #38 harness). Evidence:
+`/var/aura/evidence/power_tests/20260822/` plus `SUMMARY.md`.
+
+Flags:
+`--tf 1h --fee-bps 4 --oos-split 0.7 --trial-count 37 --atr-period 14 --regime-tf 4h --regime-htf 1d`.
+Injected edge: `edge_sharpe 0.9`, period-level ATR-normalized.
+
+| Date | Symbol | Synthetic control | Result | CoS verdict note |
+|---|---|---|---|---|
+| 2026-08-22 | PF_XBTUSD | positive | exit 0; control_passed true; track_a_keep true; DSR 1.0; PBO 0.0; n_paths 37; n_honest 37 | Positive synthetic edge was kept. |
+| 2026-08-22 | PF_XBTUSD | negative | exit 0; control_passed true; track_a_keep false; DSR ~0.0154; PBO 1.0; n_paths 37; n_honest 37 | Negative shuffle was rejected. |
+| 2026-08-22 | PF_ETHUSD | positive | Same keep pattern as PF_XBTUSD positive; n_paths 37; n_honest 37 | Positive synthetic edge was kept. |
+| 2026-08-22 | PF_ETHUSD | negative | Same reject pattern as PF_XBTUSD negative; n_paths 37; n_honest 37 | Negative shuffle was rejected. |
+
+CoS verdict: **DETECTABLE** -- both positives keep synthetic edge; both
+negatives reject shuffle. `n_paths == n_honest == 37` on these synthetic runs,
+so the PBO scar is explicit and closed for this harness path.
+
+Implications locked: prior cartridge kills remain informative; Intern R8 still
+frozen; next is width ON/OFF A/B (Grok path) because the harness can hear. This
+PR makes no live change and records no status flips.
