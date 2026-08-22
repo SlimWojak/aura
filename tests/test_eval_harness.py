@@ -239,6 +239,128 @@ class EvalHarnessTests(TestCase):
             next_trade = report["trades"][first_time_stop_index + 1]
             self.assertGreater(next_trade["entry_index"], time_stop_trades[0]["exit_index"])
 
+    def test_kijun_trail_exit_triggers_on_closed_bar_cross(self):
+        closes = [100, 101, 102, 103, 104, 105, 106, 107, 90, 89, 88, 87, 86, 85]
+        baseline_candles = [candle(index, close) for index, close in enumerate(closes)]
+        mutated_candles = list(baseline_candles)
+        mutated_candles[7] = candle_ohlc(7, open_=107, high=500, low=1, close=107)
+        exit_rules = {
+            "mode": "kijun_trail",
+            "close_on_flat": False,
+            "close_on_opposite": False,
+            "max_bars_in_trade": None,
+        }
+
+        report = run_backtest_cartridge(
+            baseline_candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}, exit_rules=exit_rules),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        mutated = run_backtest_cartridge(
+            mutated_candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}, exit_rules=exit_rules),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        first_trade = report["trades"][0]
+        triggered_signal = next(
+            signal
+            for signal in report["signals"]
+            if signal.get("exit_rule", {}).get("triggered")
+        )
+        exit_rule = triggered_signal["exit_rule"]
+        self.assertEqual("kijun_trail", first_trade["exit_reason"])
+        self.assertEqual("close_crossed_kijun", exit_rule["reason"])
+        self.assertLess(exit_rule["values"]["close"], exit_rule["values"]["kijun"])
+        self.assertEqual(
+            signal_exit_rule(report, 6)["values"]["kijun"],
+            signal_exit_rule(mutated, 6)["values"]["kijun"],
+        )
+
+    def test_atr_stop_uses_entry_decision_atr_without_future_entry_bar_range(self):
+        closes = [100, 101, 102, 103, 104, 105, 106, 107, 90, 89, 88, 87, 86, 85]
+        baseline_candles = [candle(index, close) for index, close in enumerate(closes)]
+        mutated_candles = list(baseline_candles)
+        mutated_candles[6] = candle_ohlc(6, open_=106, high=500, low=1, close=106)
+        exit_rules = {
+            "mode": "atr_stop",
+            "close_on_flat": False,
+            "close_on_opposite": False,
+            "max_bars_in_trade": None,
+            "atr_period": 2,
+            "atr_mult": 1.0,
+        }
+
+        baseline = run_backtest_cartridge(
+            baseline_candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}, exit_rules=exit_rules),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        mutated = run_backtest_cartridge(
+            mutated_candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}, exit_rules=exit_rules),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertEqual("atr_stop", baseline["trades"][0]["exit_reason"])
+        self.assertEqual("atr_stop", mutated["trades"][0]["exit_reason"])
+        self.assertEqual(
+            signal_exit_rule(baseline, 5)["values"]["stop_price"],
+            signal_exit_rule(mutated, 5)["values"]["stop_price"],
+        )
+        self.assertEqual(
+            signal_exit_rule(baseline, 5)["values"]["atr"],
+            signal_exit_rule(mutated, 5)["values"]["atr"],
+        )
+
+    def test_chandelier_trail_triggers_tightens_only_and_ignores_future_high(self):
+        closes = [100, 101, 102, 103, 104, 105, 106, 107, 90, 89, 88, 87, 86, 85]
+        baseline_candles = [candle(index, close) for index, close in enumerate(closes)]
+        mutated_candles = list(baseline_candles)
+        mutated_candles[7] = candle_ohlc(7, open_=107, high=500, low=106.9, close=107)
+        exit_rules = {
+            "mode": "chandelier_trail",
+            "close_on_flat": False,
+            "close_on_opposite": False,
+            "max_bars_in_trade": None,
+            "chandelier_period": 3,
+            "atr_period": 2,
+            "atr_mult": 1.0,
+        }
+
+        baseline = run_backtest_cartridge(
+            baseline_candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}, exit_rules=exit_rules),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        mutated = run_backtest_cartridge(
+            mutated_candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}, exit_rules=exit_rules),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        trail_prices = [
+            signal["exit_rule"]["values"]["trail_price"]
+            for signal in baseline["signals"]
+            if signal.get("exit_rule", {}).get("ready")
+            and signal["exit_rule"]["mode"] == "chandelier_trail"
+            and "trail_price" in signal["exit_rule"]["values"]
+            and signal["index"] <= 8
+        ]
+        self.assertEqual("chandelier_trail", baseline["trades"][0]["exit_reason"])
+        self.assertEqual("close_crossed_chandelier", signal_exit_rule(baseline, 8)["reason"])
+        self.assertEqual(trail_prices, sorted(trail_prices))
+        self.assertEqual(
+            signal_exit_rule(baseline, 6)["values"]["trail_price"],
+            signal_exit_rule(mutated, 6)["values"]["trail_price"],
+        )
+
     def test_long_only_allowed_sides_blocks_short_entries(self):
         closes = [140 - index for index in range(96)]
         entry_rules = {
@@ -600,6 +722,47 @@ class EvalHarnessTests(TestCase):
             ("ichi_params_20_60_trend_btc_confirm_eth_v0", btc_confirm_eth_cartridge()),
             ("ichi_v0_trend_eth_primary_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             (
+                "ichi_v0_trend_kijun_trail_v0",
+                fast_cartridge(
+                    regime={"type": "none", "params": {}},
+                    exit_rules={
+                        "mode": "kijun_trail",
+                        "close_on_flat": False,
+                        "close_on_opposite": False,
+                        "max_bars_in_trade": None,
+                    },
+                ),
+            ),
+            (
+                "ichi_v0_trend_chandelier_v0",
+                fast_cartridge(
+                    regime={"type": "none", "params": {}},
+                    exit_rules={
+                        "mode": "chandelier_trail",
+                        "close_on_flat": False,
+                        "close_on_opposite": False,
+                        "max_bars_in_trade": None,
+                        "chandelier_period": 3,
+                        "atr_period": 2,
+                        "atr_mult": 1.0,
+                    },
+                ),
+            ),
+            (
+                "ichi_v0_trend_atr_stop_v0",
+                fast_cartridge(
+                    regime={"type": "none", "params": {}},
+                    exit_rules={
+                        "mode": "atr_stop",
+                        "close_on_flat": False,
+                        "close_on_opposite": False,
+                        "max_bars_in_trade": None,
+                        "atr_period": 2,
+                        "atr_mult": 1.0,
+                    },
+                ),
+            ),
+            (
                 "ichi_params_20_60_trend_long_only_n8_v0",
                 fast_cartridge(
                     regime={"type": "none", "params": {}},
@@ -881,6 +1044,34 @@ def candle(
         "close": str(close),
         "volume": "1",
     }
+
+
+def candle_ohlc(
+    index: int,
+    *,
+    open_: int | float,
+    high: int | float,
+    low: int | float,
+    close: int | float,
+    symbol: str = "PF_XBTUSD",
+) -> dict[str, str | int]:
+    return {
+        "schema": "aura.ohlcv_candle.v1",
+        "symbol": symbol,
+        "tf": "1h",
+        "ts_ms": index * 3_600_000,
+        "source": SOURCE,
+        "ingested_at": "2026-08-22T00:00:00Z",
+        "open": str(open_),
+        "high": str(high),
+        "low": str(low),
+        "close": str(close),
+        "volume": "1",
+    }
+
+
+def signal_exit_rule(report: dict, index: int) -> dict:
+    return next(signal for signal in report["signals"] if signal["index"] == index)["exit_rule"]
 
 
 def fast_cartridge(

@@ -98,10 +98,14 @@ Allowed `exit_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `bias_flip`, `flat_on_rule_fail`, `opposite_signal`, `time_stop`, `regime_exit`. |
+| `mode` | enum | `bias_flip`, `flat_on_rule_fail`, `opposite_signal`, `time_stop`, `regime_exit`, `kijun_trail`, `atr_stop`, `chandelier_trail`. |
 | `close_on_flat` | bool | Exit when the evaluated rule returns flat. |
 | `close_on_opposite` | bool | Exit and optionally reverse when the opposite side fires. |
 | `max_bars_in_trade` | integer/null | Optional time stop. Use `null` when disabled. |
+| `kijun_period` | integer | Optional override for `kijun_trail`; omitted uses `ichimoku.kijun`. |
+| `atr_period` | integer | Optional ATR period for `atr_stop` and `chandelier_trail`; default `14`. |
+| `atr_mult` | number | Optional ATR multiplier for `atr_stop` and `chandelier_trail`; default `3.0`. |
+| `chandelier_period` | integer | Optional high/low lookback for `chandelier_trail`; default `22`. |
 
 Baseline Ichimoku v0 uses `mode: bias_flip`, `close_on_flat: true`, and
 `close_on_opposite: true`.
@@ -115,6 +119,24 @@ re-enter on the same decision bar that triggered the time stop.
 TREND side lock; while a position is open, the evaluator flattens a long when
 the current label is no longer `TREND_BULL` and flattens a short when the current
 label is no longer `TREND_BEAR`.
+
+Track C trail/stop modes are closed-bar paper exits. They do not call venues,
+place orders, or imply live stop authority. If an entry would require an
+unavailable Kijun/ATR/Chandelier level, eval fails closed by skipping that paper
+entry.
+
+- `kijun_trail`: exits a long when the closed-bar close is below
+  `Kijun(kijun_period)`, and exits a short when close is above Kijun. Omit
+  `kijun_period` to reuse `ichimoku.kijun`.
+- `atr_stop`: initializes a static stop from the entry decision bar ATR:
+  long stop = entry price - `atr_mult * ATR(atr_period)`, short stop = entry
+  price + `atr_mult * ATR(atr_period)`. The closed-bar close crossing that level
+  triggers a paper exit at the existing next-open execution assumption.
+- `chandelier_trail`: initializes and tightens a Chandelier line using only bars
+  available through the evaluated close. Long raw trail =
+  `highest_high(chandelier_period) - atr_mult * ATR(atr_period)`; short raw trail
+  = `lowest_low(chandelier_period) + atr_mult * ATR(atr_period)`. The stored
+  trail is tighten-only: non-decreasing for longs and non-increasing for shorts.
 
 ## Regime gates
 
@@ -151,7 +173,7 @@ Allowed `kill_criteria` keys:
 | `max_dd_points` | number | Kill if max drawdown exceeds this many points. |
 | `min_trades` | integer | Kill or retest if sample size is below this threshold. |
 | `must_beat_baseline` | bool | If true, compare against `baseline_ref`. |
-| `baseline_metric` | enum | `total_pnl_points`, `total_pnl_points_after_fees`, `max_drawdown_points`, `win_rate`, `profit_factor`. |
+| `baseline_metric` | enum | `total_pnl_points`, `total_pnl_points_after_fees`, `max_drawdown_points`, `win_rate`, `profit_factor`, `atr_normalized_total_return`. |
 | `notes` | string | Plain-language CoS kill/keep instruction. |
 
 ## Tiny validation example

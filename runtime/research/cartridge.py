@@ -27,7 +27,16 @@ SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
 TK_RULES = {"tenkan_over_kijun_for_long_under_for_short", "tk_cross_only", "none"}
 CHIKOU_MODES = {"close", "strict"}
-EXIT_MODES = {"bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop", "regime_exit"}
+EXIT_MODES = {
+    "bias_flip",
+    "flat_on_rule_fail",
+    "opposite_signal",
+    "time_stop",
+    "regime_exit",
+    "kijun_trail",
+    "atr_stop",
+    "chandelier_trail",
+}
 REGIME_TYPES = {"adx", "er", "cloud_thickness", "none"}
 BASELINE_METRICS = {
     "total_pnl_points",
@@ -35,6 +44,7 @@ BASELINE_METRICS = {
     "max_drawdown_points",
     "win_rate",
     "profit_factor",
+    "atr_normalized_total_return",
 }
 
 TOP_LEVEL_FIELDS = {
@@ -76,7 +86,17 @@ REQUIRED_ENTRY_FIELDS = {
     "require_chikou_confirmation",
     "chikou_mode",
 }
-EXIT_FIELDS = {"mode", "close_on_flat", "close_on_opposite", "max_bars_in_trade"}
+EXIT_FIELDS = {
+    "mode",
+    "close_on_flat",
+    "close_on_opposite",
+    "max_bars_in_trade",
+    "kijun_period",
+    "atr_period",
+    "atr_mult",
+    "chandelier_period",
+}
+REQUIRED_EXIT_FIELDS = {"mode", "close_on_flat", "close_on_opposite", "max_bars_in_trade"}
 REGIME_FIELDS = {"type", "params"}
 KILL_FIELDS = {
     "max_dd_points",
@@ -171,7 +191,7 @@ def validate_cartridge(
             )
 
     exit_rules = _require_mapping(cartridge, "exit_rules", label)
-    _require_fields(exit_rules, EXIT_FIELDS, f"{label}: exit_rules")
+    _require_fields(exit_rules, REQUIRED_EXIT_FIELDS, f"{label}: exit_rules")
     _reject_unknown_fields(exit_rules, EXIT_FIELDS, f"{label}: exit_rules")
     _require_enum(exit_rules, "mode", EXIT_MODES, f"{label}: exit_rules")
     _require_bool(exit_rules, "close_on_flat", f"{label}: exit_rules")
@@ -179,6 +199,14 @@ def validate_cartridge(
     max_bars = exit_rules["max_bars_in_trade"]
     if max_bars is not None:
         _require_positive_int(exit_rules, "max_bars_in_trade", f"{label}: exit_rules")
+    if "kijun_period" in exit_rules:
+        _require_positive_int(exit_rules, "kijun_period", f"{label}: exit_rules")
+    if "atr_period" in exit_rules:
+        _require_positive_int(exit_rules, "atr_period", f"{label}: exit_rules")
+    if "atr_mult" in exit_rules:
+        _require_positive_number(exit_rules, "atr_mult", f"{label}: exit_rules")
+    if "chandelier_period" in exit_rules:
+        _require_positive_int(exit_rules, "chandelier_period", f"{label}: exit_rules")
 
     regime = _require_mapping(cartridge, "regime", label)
     _require_fields(regime, REGIME_FIELDS, f"{label}: regime")
