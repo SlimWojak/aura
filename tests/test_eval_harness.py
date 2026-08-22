@@ -566,11 +566,11 @@ class EvalHarnessTests(TestCase):
     def test_oos_store_uses_stored_1h_regime_source_for_4h_decisions(self):
         decision_candles = [
             four_hour_candle(index, 100 + ((index % 20) - 10) + index * 0.2)
-            for index in range(96)
+            for index in range(300)
         ]
         source_candles = [
             candle(index, 100 + ((index % 80) - 40) * 0.05 + index * 0.04)
-            for index in range(96 * 4)
+            for index in range(300 * 4)
         ]
         write_candles(
             ohlcv_path("PF_XBTUSD", "4h", aura_root_override=self.aura_root),
