@@ -1,0 +1,82 @@
+# Aura lean build plan
+
+Living plan for CoS (Grok Bot). Paper-first. Disposable. No constellation coupling.
+
+Last updated: 2026-08-22
+
+## North star (near term)
+
+Prove a **closed paper loop on dexter** that agents can run without Slim staring at charts:
+
+`thesis → risk gate → Kraken futures-paper (CLI) → JSONL evidence → daily/weekly memo`
+
+CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
+
+## Where we are (done)
+
+- [x] Phase 0 framing + Phase 1 runbook
+- [x] Repo `SlimWojak/aura` + fence docs + risk ceilings
+- [x] Dexter always-on host; Hetzner backup only
+- [x] `~/aura` + `/var/aura` on dexter
+- [x] Kraken CLI 0.4.1 paper; futures-paper smoke open/flat
+- [x] Kraken Cursor connector (paper-only instructions)
+- [x] Agent workplace scaffold (AGENTS.md, DISPATCH.md, Cursor fence rule, runtime stubs)
+
+## Delegates on dexter (target)
+
+| Tool | Status | Role |
+|---|---|---|
+| Droid (Factory) | **Installed** 0.120.1 | On-box implementer near `/var/aura` |
+| Claude Code CLI | Home dir present, **CLI missing** | Deep implement / review on dexter |
+| Codex CLI | Missing | Optional third; install if diversity needed |
+| Cursor IDE/CLI | Missing | Skip on dexter; use cloud agents for PRs |
+| Kraken CLI | Installed | Spot MCP `market,paper`; futures paper CLI-only |
+
+## Build phases (lean)
+
+### P0 — Agent workplace ops (now → days)
+1. Install **Claude Code CLI** on dexter; verify paper-only prompts / no live scopes.
+2. Document Droid + Claude invoke recipes in `ops/delegates.md`.
+3. Optional: install Codex on dexter if first Claude+Droid week feels thin.
+4. Create standing Grok seats **only when needed**: Risk/Ops, Eval/Scribe (not before runtime stubs run).
+
+### P1 — Thin paper runtime (next)
+1. `runtime/risk` — admit/reject against RISK_POLICY.md (no LLM in the gate).
+2. `runtime/runner` — propose → gate → `kraken futures paper` → append decision JSONL under `/var/aura/evidence`.
+3. `runtime/scribe` — daily one-pager from JSONL (template already exists).
+4. systemd user units on dexter: runner/risk/scribe heartbeats (paper only).
+5. Kill drills A–C automated once.
+
+Exit: CoS can request a tiny supervised paper action end-to-end with traces; cold kill drill passes.
+
+### P2 — First parametric family (after P1 honest)
+1. One fully parametric signal family (z/Kalman or funding-band) — **one**, not a zoo.
+2. Pre-register trial → paper run → bank nulls/graves in LEDGER.
+3. Weekly kill/promote memo; CoS metrics still primary.
+
+Exit: ≥2 weekly memos with honest traces; no fence breaches.
+
+### P3 — Structural track (later)
+1. Hyperliquid testnet **read-only** spike → then structural signals if S1 loop is honest.
+2. Still no live capital without Slim go + Singapore eligibility check.
+
+## Explicit non-goals (until Slim says otherwise)
+
+- Live Kraken / live HL
+- IBKR FX control track
+- Forking constellation / ATOM perception
+- Greenfield backtester platform before paper loop works
+- Standing LLM "trader personas" without eval loop
+
+## CoS weekly rhythm (once P1 lands)
+
+- Daily: auto one-pager in `/var/aura/evidence` + optional alert email
+- Weekly: promote / iterate / kill memo (<30 min Slim review)
+- On fence breach: hard kill + pause
+
+## Next concrete actions (ordered)
+
+1. Install Claude CLI on dexter and smoke `claude --version` from SSH.
+2. Add `ops/delegates.md` with exact Droid/Claude invocation patterns for aura.
+3. Cloud-agent PR: P1 risk-gate stub + JSONL writer (no strategy).
+4. First supervised runner loop (still human-triggered).
