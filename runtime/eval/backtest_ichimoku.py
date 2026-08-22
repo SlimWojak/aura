@@ -25,6 +25,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
+from runtime.eval.statistics import DEFAULT_ATR_PERIOD, build_return_report
 from runtime.market import ohlcv_path, read_candles, validate_symbol, validate_tf
 from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
 from runtime.research.cartridge import load_cartridge, load_cartridges
@@ -78,6 +79,8 @@ def run_backtest(
     params: IchimokuParams | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
 ) -> dict[str, Any]:
     """Walk historical candles and score the v0 Ichimoku bias.
 
@@ -121,6 +124,8 @@ def run_backtest(
         ),
         signal_provider=lambda index: signal_from_series(series, index=index),
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
     )
 
 
@@ -132,6 +137,8 @@ def run_backtest_cartridge(
     tf: str | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
     regime_tf: str | None = None,
     regime_htf: str | None = None,
     confirm_candles: Sequence[Mapping[str, Any]] | None = None,
@@ -230,6 +237,8 @@ def run_backtest_cartridge(
         exit_gate_provider=regime_gate_provider if exit_mode == "regime_exit" else None,
         allowed_entry_sides=allowed_entry_sides,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
     )
     if regime_gate_provider is not None:
         report["regime_gate"] = {
@@ -270,6 +279,8 @@ def run_backtest_reference(
     params: IchimokuParams | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
 ) -> dict[str, Any]:
     """Reference implementation that recomputes Ichimoku from each prefix.
 
@@ -310,6 +321,8 @@ def run_backtest_reference(
             params=resolved_params,
         ),
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
     )
 
 
@@ -351,6 +364,8 @@ def _score_backtest(
     exit_gate_provider: _EntryGateProvider | None = None,
     allowed_entry_sides: set[str] | None = None,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
 ) -> dict[str, Any]:
     if min_bars <= 0:
         raise ValueError("min_bars must be positive")
@@ -513,6 +528,25 @@ def _score_backtest(
             total_pnl_points - total_fee_points
         )
         metrics["fee_adjusted_baseline_metric"] = "total_pnl_points_after_fees"
+    return_report = build_return_report(
+        candles,
+        trades,
+        start_index=start_index,
+        tf=tf,
+        fee_bps=resolved_fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
+    )
+    metrics["simple_returns"] = return_report["summary"]["simple"]
+    metrics["atr_normalized_returns"] = return_report["summary"]["atr_normalized"]
+    metrics["gross_simple_returns"] = return_report["summary"]["gross_simple"]
+    metrics["gross_atr_normalized_returns"] = return_report["summary"]["gross_atr_normalized"]
+    metrics["average_holding_bars"] = return_report["summary"]["average_holding_bars"]
+    metrics["turnover"] = return_report["summary"]["turnover"]
+    metrics["fee_drag_simple_return"] = return_report["summary"]["fee_drag_simple_return"]
+    metrics["fee_drag_atr_normalized_return"] = return_report["summary"][
+        "fee_drag_atr_normalized_return"
+    ]
     report = {
         "schema": BACKTEST_REPORT_SCHEMA,
         "ok": True,
@@ -531,6 +565,7 @@ def _score_backtest(
         "engine": engine,
         "lookahead_note": lookahead_note,
         "metrics": metrics,
+        "return_series": return_report,
         "trades": trades,
         "signals": signal_trace,
     }
@@ -546,6 +581,8 @@ def backtest_from_store(
     max_bars: int | None = None,
     since_ts_ms: int | None = None,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
 ) -> dict[str, Any]:
     """Read stored OHLCV and return a backtest report."""
 
@@ -559,6 +596,8 @@ def backtest_from_store(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
@@ -583,6 +622,8 @@ def cartridge_backtest_from_store(
     since_ts_ms: int | None = None,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
     regime_tf: str | None = None,
     regime_htf: str | None = None,
 ) -> dict[str, Any]:
@@ -621,6 +662,8 @@ def cartridge_backtest_from_store(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         confirm_candles=windowed_confirm_candles,
@@ -653,6 +696,8 @@ def cartridge_oos_backtest_from_store(
     since_ts_ms: int | None = None,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
     regime_tf: str | None = None,
     regime_htf: str | None = None,
     oos_split: float = 0.7,
@@ -693,6 +738,8 @@ def cartridge_oos_backtest_from_store(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         oos_split=split_fraction,
@@ -723,6 +770,8 @@ def run_cartridge_oos_split(
     tf: str | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    atr_period: int = DEFAULT_ATR_PERIOD,
+    trial_count: int = 1,
     regime_tf: str | None = None,
     regime_htf: str | None = None,
     oos_split: float = 0.7,
@@ -754,6 +803,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         confirm_candles=confirm_is_candles,
@@ -765,6 +816,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         confirm_candles=confirm_oos_candles,
@@ -776,6 +829,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         cartridge_root=cartridge_root,
@@ -787,6 +842,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         cartridge_root=cartridge_root,
@@ -867,6 +924,7 @@ def run_cartridge_oos_split(
             "oos": baseline_oos,
         },
     }
+    report["return_series"] = _combined_split_return_series(candidate_is, candidate_oos)
     if "regime_gate" in candidate_is or "regime_gate" in candidate_oos:
         report["regime_gate"] = candidate_is.get("regime_gate", candidate_oos.get("regime_gate"))
     if not report["ok"]:
@@ -1586,6 +1644,8 @@ def _run_baseline_backtest(
     tf: str,
     min_bars: int | None,
     fee_bps: float,
+    atr_period: int,
+    trial_count: int,
     regime_tf: str | None,
     regime_htf: str | None,
     cartridge_root: str | Path,
@@ -1598,6 +1658,8 @@ def _run_baseline_backtest(
             tf=tf,
             min_bars=min_bars,
             fee_bps=fee_bps,
+            atr_period=atr_period,
+            trial_count=trial_count,
         )
 
     baseline_cartridge = resolve_cartridge(
@@ -1617,6 +1679,8 @@ def _run_baseline_backtest(
         tf=tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        atr_period=atr_period,
+        trial_count=trial_count,
         regime_tf=baseline_regime_tf,
         regime_htf=baseline_regime_htf,
     )
@@ -1701,6 +1765,29 @@ def _filter_candles_to_timestamps(
         for candle in candles
         if _candle_ts_ms(candle) in reference_timestamps
     ]
+
+
+def _combined_split_return_series(*reports: Mapping[str, Any]) -> dict[str, Any]:
+    combined_rows: list[dict[str, Any]] = []
+    split_names = ("is", "oos")
+    summaries: dict[str, Any] = {}
+    for split_name, report in zip(split_names, reports, strict=True):
+        return_series = _mapping(report, "return_series")
+        summaries[split_name] = return_series.get("summary", {})
+        for row in return_series.get("series", []):
+            combined_row = dict(row)
+            combined_row["split"] = split_name
+            combined_rows.append(combined_row)
+    first_series = _mapping(reports[0], "return_series")
+    return {
+        "schema": first_series.get("schema"),
+        "atr_period": first_series.get("atr_period"),
+        "periods_per_year": first_series.get("periods_per_year"),
+        "trial_count": first_series.get("trial_count"),
+        "summary": summaries,
+        "series": combined_rows,
+        "note": "Candidate IS/OOS return rows combined for downstream matrix scoring.",
+    }
 
 
 def _signal_provider_for_cartridge(
@@ -2433,11 +2520,12 @@ def _insufficient_history_report(
 
 
 def write_report(report: Mapping[str, Any], output_dir: Path) -> dict[str, str]:
-    """Write report JSON and JSONL trades into an eval evidence directory."""
+    """Write report JSON, JSONL trades, and JSONL returns into eval evidence."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "report.json"
     trades_path = output_dir / "trades.jsonl"
+    returns_path = output_dir / "returns.jsonl"
     report_path.write_text(
         json.dumps(dict(report), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -2446,7 +2534,17 @@ def write_report(report: Mapping[str, Any], output_dir: Path) -> dict[str, str]:
         for trade in report.get("trades", []):
             handle.write(json.dumps(trade, sort_keys=True, separators=(",", ":")))
             handle.write("\n")
-    return {"report_json": str(report_path), "trades_jsonl": str(trades_path)}
+    return_series = report.get("return_series")
+    return_rows = return_series.get("series", []) if isinstance(return_series, Mapping) else []
+    with returns_path.open("w", encoding="utf-8") as handle:
+        for row in return_rows:
+            handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")))
+            handle.write("\n")
+    return {
+        "report_json": str(report_path),
+        "trades_jsonl": str(trades_path),
+        "returns_jsonl": str(returns_path),
+    }
 
 
 def utc_now_iso() -> str:
