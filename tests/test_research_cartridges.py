@@ -41,6 +41,9 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_tk_cloud_v0",
                 "ichi_tk_cross_trend_v0",
                 "ichi_v0_trend_eth_primary_v0",
+                "ichi_v0_trend_atr_stop_v0",
+                "ichi_v0_trend_chandelier_v0",
+                "ichi_v0_trend_kijun_trail_v0",
                 "ichi_v0_baseline",
             },
             {cartridge["id"] for cartridge in cartridges},
@@ -58,7 +61,12 @@ class ResearchCartridgeTests(TestCase):
                 self.assertEqual("1h", cartridge["tf"])
                 self.assertIn(
                     cartridge["baseline_ref"],
-                    {"ichimoku_v0", "ichi_tk_strong_trend_only_v0", "ichi_v0_baseline"},
+                    {
+                        "ichimoku_v0",
+                        "ichi_tk_strong_trend_only_v0",
+                        "ichi_v0_baseline",
+                        "ichi_params_20_60_trend_v0",
+                    },
                 )
                 allowed_sides = set(cartridge["entry_rules"]["allowed_sides"])
                 if cartridge["id"] in {
@@ -286,6 +294,40 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("killed", long_only_n8["status"])
         self.assertIn("docs/LEDGER.md", long_only_n8["sources"])
         self.assertIn("IS DD >12000", long_only_n8["notes"])
+
+    def test_track_c_exit_vocabulary_drafts_load_requested_modes(self):
+        kijun_trail = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_v0_trend_kijun_trail_v0.yaml"
+        )
+        chandelier = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_v0_trend_chandelier_v0.yaml"
+        )
+        atr_stop = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_trend_atr_stop_v0.yaml")
+
+        for cartridge in (kijun_trail, chandelier, atr_stop):
+            with self.subTest(cartridge=cartridge["id"]):
+                self.assertEqual("draft", cartridge["status"])
+                self.assertEqual("ichi_params_20_60_trend_v0", cartridge["baseline_ref"])
+                self.assertEqual(20, cartridge["ichimoku"]["tenkan"])
+                self.assertEqual(60, cartridge["ichimoku"]["kijun"])
+                self.assertFalse(cartridge["exit_rules"]["close_on_flat"])
+                self.assertFalse(cartridge["exit_rules"]["close_on_opposite"])
+                self.assertEqual(
+                    "atr_normalized_total_return",
+                    cartridge["kill_criteria"]["baseline_metric"],
+                )
+                self.assertIn("70/30 fee-on OOS", cartridge["kill_criteria"]["notes"])
+                self.assertIn("new id only", cartridge["notes"])
+
+        self.assertEqual("kijun_trail", kijun_trail["exit_rules"]["mode"])
+        self.assertNotIn("kijun_period", kijun_trail["exit_rules"])
+        self.assertEqual("chandelier_trail", chandelier["exit_rules"]["mode"])
+        self.assertEqual(22, chandelier["exit_rules"]["chandelier_period"])
+        self.assertEqual(14, chandelier["exit_rules"]["atr_period"])
+        self.assertEqual(3.0, chandelier["exit_rules"]["atr_mult"])
+        self.assertEqual("atr_stop", atr_stop["exit_rules"]["mode"])
+        self.assertEqual(14, atr_stop["exit_rules"]["atr_period"])
+        self.assertEqual(3.0, atr_stop["exit_rules"]["atr_mult"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")

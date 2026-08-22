@@ -31,6 +31,24 @@ fee_points = fee_bps / 10000 * (entry_price + exit_price)
 The return layer allocates fee drag on the exit row in both simple and
 ATR-normalized units.
 
+## Track C exit modes
+
+The cartridge eval path supports closed-bar paper exits beyond `bias_flip`:
+
+- `kijun_trail`: long exits when close < current Kijun; short mirrors above
+  Kijun.
+- `atr_stop`: static stop initialized from the entry decision bar ATR and paper
+  entry price.
+- `chandelier_trail`: tighten-only ATR Chandelier line using the highest high or
+  lowest low available through the evaluated bar.
+
+These modes keep the harness paper-only and preserve the existing execution
+assumption: a closed-bar trigger exits at next open when available, otherwise
+current close. Missing Kijun/ATR/Chandelier inputs fail closed by blocking the
+new paper entry rather than running an unprotected trade. `kill_criteria` can use
+`baseline_metric: atr_normalized_total_return` to compare candidates against the
+same Track A return layer.
+
 ## Per-trial statistics
 
 Each return stream emits:

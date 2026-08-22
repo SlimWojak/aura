@@ -25,7 +25,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
-from runtime.eval.statistics import DEFAULT_ATR_PERIOD, build_return_report
+from runtime.eval.statistics import DEFAULT_ATR_PERIOD, build_return_report, compute_wilder_atr
 from runtime.market import ohlcv_path, read_candles, validate_symbol, validate_tf
 from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
 from runtime.research.cartridge import load_cartridge, load_cartridges
@@ -48,6 +48,8 @@ CARTRIDGE_ROOT = Path(__file__).resolve().parents[2] / "research" / "cartridges"
 _DIRECTION_BY_BIAS: dict[Bias, int] = {"long": 1, "short": -1, "flat": 0}
 _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
 _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
+_TRAIL_EXIT_MODES = {"kijun_trail", "atr_stop", "chandelier_trail"}
+_SAME_BAR_ENTRY_BLOCK_EXIT_REASONS = _TRAIL_EXIT_MODES | {"time_stop"}
 _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_v0",
     "ichi_params_20_60_trend_timestop_v0",
@@ -66,6 +68,9 @@ _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_eth_dd_v0",
     "ichi_params_10_30_trend_v0",
     "ichi_tenkan_bounce_trend_v0",
+    "ichi_v0_trend_atr_stop_v0",
+    "ichi_v0_trend_chandelier_v0",
+    "ichi_v0_trend_kijun_trail_v0",
 }
 _SignalProvider = Callable[[int], IchimokuSignal]
 _EntryGateProvider = Callable[[int, Bias], Mapping[str, Any]]
@@ -371,6 +376,7 @@ def _score_backtest(
         raise ValueError("min_bars must be positive")
     resolved_fee_bps = _nonnegative_float(fee_bps, "fee_bps")
     exit_policy = _exit_policy(exit_rules)
+    exit_indicators = _exit_indicators(candles, params=params, exit_policy=exit_policy)
 
     start_index = min_bars - 1
     bias_counts: dict[str, int] = {"long": 0, "short": 0, "flat": 0}
@@ -422,13 +428,27 @@ def _score_backtest(
             signal_trace[-1]["entry_gate"] = entry_gate
 
         current_direction = int(position["direction"]) if position is not None else 0
-        exit_reason = _signal_exit_reason(
-            current_direction=current_direction,
-            desired_direction=desired_direction,
-            signal_bias=signal.bias,
-            close_on_flat=bool(exit_policy["close_on_flat"]),
-            close_on_opposite=bool(exit_policy["close_on_opposite"]),
-        )
+        exit_reason = None
+        if position is not None:
+            exit_rule_trace = _trail_exit_trace(
+                position=position,
+                candle=candles[index],
+                index=index,
+                exit_policy=exit_policy,
+                exit_indicators=exit_indicators,
+            )
+            if exit_rule_trace is not None:
+                signal_trace[-1]["exit_rule"] = exit_rule_trace
+                if bool(exit_rule_trace["triggered"]):
+                    exit_reason = str(exit_rule_trace["exit_reason"])
+        if exit_reason is None:
+            exit_reason = _signal_exit_reason(
+                current_direction=current_direction,
+                desired_direction=desired_direction,
+                signal_bias=signal.bias,
+                close_on_flat=bool(exit_policy["close_on_flat"]),
+                close_on_opposite=bool(exit_policy["close_on_opposite"]),
+            )
         if exit_reason is None and position is not None and exit_gate_provider is not None:
             current_side = _BIAS_BY_DIRECTION[current_direction]
             exit_gate = _normalize_entry_gate(exit_gate_provider(index, current_side))
@@ -455,7 +475,7 @@ def _score_backtest(
             peak_equity_points = max(peak_equity_points, equity_points)
             max_drawdown_points = max(max_drawdown_points, peak_equity_points - equity_points)
             position = None
-            blocked_same_bar_entry = exit_reason == "time_stop"
+            blocked_same_bar_entry = exit_reason in _SAME_BAR_ENTRY_BLOCK_EXIT_REASONS
 
         if (
             desired_direction != 0
@@ -463,10 +483,22 @@ def _score_backtest(
             and bool(entry_gate["allowed"])
             and not blocked_same_bar_entry
         ):
+            exit_state, exit_ready_trace = _trail_exit_state_for_entry(
+                direction=desired_direction,
+                entry_execution=execution,
+                decision_index=index,
+                exit_policy=exit_policy,
+                exit_indicators=exit_indicators,
+            )
+            if exit_ready_trace is not None:
+                signal_trace[-1]["exit_rule"] = exit_ready_trace
+            if exit_ready_trace is not None and not bool(exit_ready_trace["ready"]):
+                continue
             position = _open_position(
                 direction=desired_direction,
                 entry_execution=execution,
                 entry_reason=f"bias_{signal.bias}",
+                exit_state=exit_state,
             )
 
         if position is not None:
@@ -1098,7 +1130,14 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         or "setup_bars" in entry_rules
     ):
         reasons.append("TK-strong refinement entry flags are only wired for tk_cloud_bias")
-    if is_always_on and exit_mode not in {"bias_flip", "time_stop", "regime_exit"}:
+    if is_always_on and exit_mode not in {
+        "bias_flip",
+        "time_stop",
+        "regime_exit",
+        "kijun_trail",
+        "atr_stop",
+        "chandelier_trail",
+    }:
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_tk_cloud_strong and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
@@ -1110,9 +1149,9 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_tenkan_bounce and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
-    if not bool(exit_rules["close_on_flat"]):
+    if exit_mode not in _TRAIL_EXIT_MODES and not bool(exit_rules["close_on_flat"]):
         reasons.append("exit_rules.close_on_flat=false is not wired")
-    if not bool(exit_rules["close_on_opposite"]):
+    if exit_mode not in _TRAIL_EXIT_MODES and not bool(exit_rules["close_on_opposite"]):
         reasons.append("exit_rules.close_on_opposite=false is not wired")
     if regime_type not in {"none", "adx", "er", "cloud_thickness"}:
         reasons.append(f"regime.type={regime['type']!r} is not wired")
@@ -1727,6 +1766,9 @@ def _metric_value(report: Mapping[str, Any], metric_name: str) -> float:
     metrics = _mapping(report, "metrics")
     if metric_name in metrics:
         return float(metrics[metric_name])
+    if metric_name == "atr_normalized_total_return":
+        atr_summary = _mapping(metrics, "atr_normalized_returns")
+        return float(atr_summary["total_return"])
     if metric_name == "total_pnl_points_after_fees" and "total_pnl_points" in metrics:
         return float(metrics["total_pnl_points"])
     raise ValueError(f"metric {metric_name!r} is not available in report")
@@ -2321,9 +2363,17 @@ def _exit_policy(exit_rules: Mapping[str, Any] | None) -> dict[str, Any]:
             "close_on_flat": True,
             "close_on_opposite": True,
             "max_bars_in_trade": None,
+            "kijun_period": None,
+            "atr_period": DEFAULT_ATR_PERIOD,
+            "atr_mult": 3.0,
+            "chandelier_period": 22,
         }
 
     max_bars = exit_rules["max_bars_in_trade"]
+    kijun_period = exit_rules.get("kijun_period")
+    atr_period = exit_rules.get("atr_period", DEFAULT_ATR_PERIOD)
+    atr_mult = exit_rules.get("atr_mult", 3.0)
+    chandelier_period = exit_rules.get("chandelier_period", 22)
     return {
         "mode": str(exit_rules["mode"]),
         "close_on_flat": bool(exit_rules["close_on_flat"]),
@@ -2332,6 +2382,17 @@ def _exit_policy(exit_rules: Mapping[str, Any] | None) -> dict[str, Any]:
             _positive_int(max_bars, "exit_rules.max_bars_in_trade")
             if max_bars is not None
             else None
+        ),
+        "kijun_period": (
+            _positive_int(kijun_period, "exit_rules.kijun_period")
+            if kijun_period is not None
+            else None
+        ),
+        "atr_period": _positive_int(atr_period, "exit_rules.atr_period"),
+        "atr_mult": _positive_float(atr_mult, "exit_rules.atr_mult"),
+        "chandelier_period": _positive_int(
+            chandelier_period,
+            "exit_rules.chandelier_period",
         ),
     }
 
@@ -2365,6 +2426,352 @@ def _time_stop_due(
     if index < first_traded_index:
         return False
     return (index - first_traded_index + 1) >= max_bars_in_trade
+
+
+def _exit_indicators(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    params: IchimokuParams,
+    exit_policy: Mapping[str, Any],
+) -> dict[str, list[float | None]]:
+    mode = str(exit_policy["mode"])
+    indicators: dict[str, list[float | None]] = {}
+    if mode == "kijun_trail":
+        kijun_period = exit_policy["kijun_period"] or params.kijun
+        indicators["kijun"] = _rolling_midpoints(candles, period=int(kijun_period))
+    if mode in {"atr_stop", "chandelier_trail"}:
+        indicators["atr"] = compute_wilder_atr(
+            candles,
+            period=int(exit_policy["atr_period"]),
+        )
+    if mode == "chandelier_trail":
+        chandelier_period = int(exit_policy["chandelier_period"])
+        indicators["highest_high"] = _rolling_extreme(
+            candles,
+            field="high",
+            period=chandelier_period,
+            extreme=max,
+        )
+        indicators["lowest_low"] = _rolling_extreme(
+            candles,
+            field="low",
+            period=chandelier_period,
+            extreme=min,
+        )
+    return indicators
+
+
+def _trail_exit_state_for_entry(
+    *,
+    direction: int,
+    entry_execution: Mapping[str, Any],
+    decision_index: int,
+    exit_policy: Mapping[str, Any],
+    exit_indicators: Mapping[str, Sequence[float | None]],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    mode = str(exit_policy["mode"])
+    if mode not in _TRAIL_EXIT_MODES:
+        return {}, None
+    if mode == "kijun_trail":
+        kijun = _indicator_value(exit_indicators, "kijun", decision_index)
+        period = exit_policy["kijun_period"] or "ichimoku.kijun"
+        if kijun is None:
+            return {}, _exit_rule_ready_trace(
+                mode=mode,
+                ready=False,
+                reason="kijun_unavailable",
+                values={"kijun_period": period},
+            )
+        return {"mode": mode}, _exit_rule_ready_trace(
+            mode=mode,
+            ready=True,
+            reason="kijun_available",
+            values={"kijun": kijun, "kijun_period": period},
+        )
+    if mode == "atr_stop":
+        atr = _indicator_value(exit_indicators, "atr", decision_index)
+        if atr is None:
+            return {}, _exit_rule_ready_trace(
+                mode=mode,
+                ready=False,
+                reason="atr_unavailable",
+                values={
+                    "atr_period": exit_policy["atr_period"],
+                    "atr_mult": exit_policy["atr_mult"],
+                },
+            )
+        stop_price = _atr_stop_price(
+            direction=direction,
+            entry_price=float(entry_execution["price"]),
+            atr=atr,
+            atr_mult=float(exit_policy["atr_mult"]),
+        )
+        return {
+            "mode": mode,
+            "stop_price": stop_price,
+            "atr_at_entry": atr,
+        }, _exit_rule_ready_trace(
+            mode=mode,
+            ready=True,
+            reason="atr_stop_initialized",
+            values={
+                "atr": atr,
+                "atr_period": exit_policy["atr_period"],
+                "atr_mult": exit_policy["atr_mult"],
+                "stop_price": stop_price,
+            },
+        )
+    if mode == "chandelier_trail":
+        raw_trail = _chandelier_raw_trail(
+            direction=direction,
+            index=decision_index,
+            exit_policy=exit_policy,
+            exit_indicators=exit_indicators,
+        )
+        if raw_trail is None:
+            return {}, _exit_rule_ready_trace(
+                mode=mode,
+                ready=False,
+                reason="chandelier_unavailable",
+                values={
+                    "atr_period": exit_policy["atr_period"],
+                    "atr_mult": exit_policy["atr_mult"],
+                    "chandelier_period": exit_policy["chandelier_period"],
+                },
+            )
+        return {
+            "mode": mode,
+            "trail_price": raw_trail,
+        }, _exit_rule_ready_trace(
+            mode=mode,
+            ready=True,
+            reason="chandelier_initialized",
+            values={
+                "atr_period": exit_policy["atr_period"],
+                "atr_mult": exit_policy["atr_mult"],
+                "chandelier_period": exit_policy["chandelier_period"],
+                "trail_price": raw_trail,
+            },
+        )
+    raise ValueError(f"unsupported trail exit mode: {mode}")
+
+
+def _trail_exit_trace(
+    *,
+    position: dict[str, Any],
+    candle: Mapping[str, float | int | None],
+    index: int,
+    exit_policy: Mapping[str, Any],
+    exit_indicators: Mapping[str, Sequence[float | None]],
+) -> dict[str, Any] | None:
+    mode = str(exit_policy["mode"])
+    if mode not in _TRAIL_EXIT_MODES:
+        return None
+    direction = int(position["direction"])
+    close = float(candle["close"])
+    if mode == "kijun_trail":
+        kijun = _indicator_value(exit_indicators, "kijun", index)
+        if kijun is None:
+            return _exit_rule_trigger_trace(
+                mode=mode,
+                ready=False,
+                triggered=True,
+                exit_reason=mode,
+                reason="kijun_unavailable",
+                values={
+                    "close": close,
+                    "kijun_period": exit_policy["kijun_period"] or "ichimoku.kijun",
+                },
+            )
+        triggered = (direction > 0 and close < kijun) or (direction < 0 and close > kijun)
+        return _exit_rule_trigger_trace(
+            mode=mode,
+            ready=True,
+            triggered=triggered,
+            exit_reason=mode,
+            reason="close_crossed_kijun" if triggered else "kijun_not_crossed",
+            values={
+                "close": close,
+                "kijun": kijun,
+                "kijun_period": exit_policy["kijun_period"] or "ichimoku.kijun",
+            },
+        )
+    if mode == "atr_stop":
+        exit_state = _position_exit_state(position, mode=mode)
+        stop_price = float(exit_state["stop_price"])
+        triggered = (direction > 0 and close <= stop_price) or (
+            direction < 0 and close >= stop_price
+        )
+        return _exit_rule_trigger_trace(
+            mode=mode,
+            ready=True,
+            triggered=triggered,
+            exit_reason=mode,
+            reason="close_crossed_atr_stop" if triggered else "atr_stop_not_crossed",
+            values={
+                "close": close,
+                "stop_price": stop_price,
+                "atr_at_entry": float(exit_state["atr_at_entry"]),
+                "atr_period": exit_policy["atr_period"],
+                "atr_mult": exit_policy["atr_mult"],
+            },
+        )
+    if mode == "chandelier_trail":
+        exit_state = _position_exit_state(position, mode=mode)
+        raw_trail = _chandelier_raw_trail(
+            direction=direction,
+            index=index,
+            exit_policy=exit_policy,
+            exit_indicators=exit_indicators,
+        )
+        if raw_trail is None:
+            return _exit_rule_trigger_trace(
+                mode=mode,
+                ready=False,
+                triggered=True,
+                exit_reason=mode,
+                reason="chandelier_unavailable",
+                values={
+                    "close": close,
+                    "atr_period": exit_policy["atr_period"],
+                    "atr_mult": exit_policy["atr_mult"],
+                    "chandelier_period": exit_policy["chandelier_period"],
+                },
+            )
+        previous_trail = float(exit_state["trail_price"])
+        trail_price = max(previous_trail, raw_trail) if direction > 0 else min(previous_trail, raw_trail)
+        exit_state["trail_price"] = trail_price
+        triggered = (direction > 0 and close <= trail_price) or (
+            direction < 0 and close >= trail_price
+        )
+        return _exit_rule_trigger_trace(
+            mode=mode,
+            ready=True,
+            triggered=triggered,
+            exit_reason=mode,
+            reason="close_crossed_chandelier" if triggered else "chandelier_not_crossed",
+            values={
+                "close": close,
+                "raw_trail_price": raw_trail,
+                "trail_price": trail_price,
+                "previous_trail_price": previous_trail,
+                "atr_period": exit_policy["atr_period"],
+                "atr_mult": exit_policy["atr_mult"],
+                "chandelier_period": exit_policy["chandelier_period"],
+            },
+        )
+    raise ValueError(f"unsupported trail exit mode: {mode}")
+
+
+def _exit_rule_ready_trace(
+    *,
+    mode: str,
+    ready: bool,
+    reason: str,
+    values: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "ready": ready,
+        "triggered": False,
+        "reason": reason,
+        "values": _stable_mapping_values(values),
+    }
+
+
+def _exit_rule_trigger_trace(
+    *,
+    mode: str,
+    ready: bool,
+    triggered: bool,
+    exit_reason: str,
+    reason: str,
+    values: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "ready": ready,
+        "triggered": triggered,
+        "exit_reason": exit_reason,
+        "reason": reason,
+        "values": _stable_mapping_values(values),
+    }
+
+
+def _position_exit_state(position: Mapping[str, Any], *, mode: str) -> dict[str, Any]:
+    exit_state = position.get("exit_state")
+    if not isinstance(exit_state, dict) or exit_state.get("mode") != mode:
+        raise ValueError(f"position exit_state is missing for {mode}")
+    return exit_state
+
+
+def _atr_stop_price(
+    *,
+    direction: int,
+    entry_price: float,
+    atr: float,
+    atr_mult: float,
+) -> float:
+    return entry_price - (direction * atr_mult * atr)
+
+
+def _chandelier_raw_trail(
+    *,
+    direction: int,
+    index: int,
+    exit_policy: Mapping[str, Any],
+    exit_indicators: Mapping[str, Sequence[float | None]],
+) -> float | None:
+    atr = _indicator_value(exit_indicators, "atr", index)
+    if atr is None:
+        return None
+    atr_offset = float(exit_policy["atr_mult"]) * atr
+    if direction > 0:
+        highest_high = _indicator_value(exit_indicators, "highest_high", index)
+        return None if highest_high is None else highest_high - atr_offset
+    lowest_low = _indicator_value(exit_indicators, "lowest_low", index)
+    return None if lowest_low is None else lowest_low + atr_offset
+
+
+def _indicator_value(
+    indicators: Mapping[str, Sequence[float | None]],
+    name: str,
+    index: int,
+) -> float | None:
+    values = indicators.get(name)
+    if values is None or index < 0 or index >= len(values):
+        return None
+    value = values[index]
+    return None if value is None else float(value)
+
+
+def _rolling_midpoints(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    period: int,
+) -> list[float | None]:
+    highs = [float(candle["high"]) for candle in candles]
+    lows = [float(candle["low"]) for candle in candles]
+    values: list[float | None] = [None] * len(candles)
+    for index in range(period - 1, len(candles)):
+        start = index - period + 1
+        values[index] = (max(highs[start : index + 1]) + min(lows[start : index + 1])) / 2
+    return values
+
+
+def _rolling_extreme(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    field: str,
+    period: int,
+    extreme: Callable[[Sequence[float]], float],
+) -> list[float | None]:
+    raw_values = [float(candle[field]) for candle in candles]
+    values: list[float | None] = [None] * len(candles)
+    for index in range(period - 1, len(candles)):
+        start = index - period + 1
+        values[index] = extreme(raw_values[start : index + 1])
+    return values
 
 
 def _attach_cartridge_metadata(
@@ -2585,8 +2992,9 @@ def _open_position(
     direction: int,
     entry_execution: Mapping[str, Any],
     entry_reason: str,
+    exit_state: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    position = {
         "direction": direction,
         "entry_index": entry_execution["index"],
         "entry_ts_ms": entry_execution["ts_ms"],
@@ -2594,6 +3002,9 @@ def _open_position(
         "entry_basis": entry_execution["basis"],
         "entry_reason": entry_reason,
     }
+    if exit_state:
+        position["exit_state"] = dict(exit_state)
+    return position
 
 
 def _close_trade(

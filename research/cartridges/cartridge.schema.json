@@ -134,7 +134,16 @@
       "required": ["mode", "close_on_flat", "close_on_opposite", "max_bars_in_trade"],
       "properties": {
         "mode": {
-          "enum": ["bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop", "regime_exit"]
+          "enum": [
+            "bias_flip",
+            "flat_on_rule_fail",
+            "opposite_signal",
+            "time_stop",
+            "regime_exit",
+            "kijun_trail",
+            "atr_stop",
+            "chandelier_trail"
+          ]
         },
         "close_on_flat": {
           "type": "boolean"
@@ -145,6 +154,25 @@
         "max_bars_in_trade": {
           "type": ["integer", "null"],
           "minimum": 1
+        },
+        "kijun_period": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "atr_period": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 14
+        },
+        "atr_mult": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 3.0
+        },
+        "chandelier_period": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 22
         }
       }
     },
@@ -189,7 +217,8 @@
             "total_pnl_points_after_fees",
             "max_drawdown_points",
             "win_rate",
-            "profit_factor"
+            "profit_factor",
+            "atr_normalized_total_return"
           ]
         },
         "notes": {
