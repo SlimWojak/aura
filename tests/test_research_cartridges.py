@@ -87,8 +87,9 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("tk_cross_only", tk_strong["entry_rules"]["require_tk_state"])
         self.assertFalse(tk_strong["entry_rules"]["require_chikou_confirmation"])
         self.assertEqual("total_pnl_points_after_fees", trend_only["kill_criteria"]["baseline_metric"])
-        self.assertEqual("draft", trend_only["status"])
+        self.assertEqual("killed", trend_only["status"])
         self.assertIn("OOS failed", trend_only["notes"])
+        self.assertIn("docs/LEDGER.md", trend_only["sources"])
         self.assertIn("70/30", trend_oos["kill_criteria"]["notes"])
         self.assertEqual("total_pnl_points_after_fees", trend_oos["kill_criteria"]["baseline_metric"])
         self.assertTrue(kijun_dip["entry_rules"]["require_kijun_dip_setup"])
@@ -98,6 +99,8 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("ichi_tk_strong_trend_only_v0", cloud_color["baseline_ref"])
         self.assertEqual("kijun_bounce", kijun_bounce["entry_rules"]["mode"])
         self.assertEqual("none", kijun_bounce["entry_rules"]["require_tk_state"])
+        self.assertEqual("killed", kijun_bounce["status"])
+        self.assertIn("docs/LEDGER.md", kijun_bounce["sources"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")

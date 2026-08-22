@@ -1,6 +1,6 @@
 id: ichi_kijun_bounce_trend_v0
 title: Kijun bounce with Phase 2 trend veto
-status: draft
+status: killed
 thesis: Test whether cross-back-through-kijun pullback entries behave better when Phase 2 regime permissioning restricts entries to the matching TREND state.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,9 +32,10 @@ kill_criteria:
   min_trades: 25
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless fee-on Phase 2 gated results beat fee-on ichi_v0_baseline with enough trades to inspect pullback behavior.
+  notes: Killed by 2026-08-22 bank in docs/LEDGER.md; BTC full pnl_fee -6316.7388 and OOS pnl_fee -5018.7444 stayed fee-negative, so beating a worse baseline is not a keep.
 sources:
+  - docs/LEDGER.md
   - docs/REGIME.md
   - runtime/brain/ichimoku.py
   - runtime/eval/backtest_ichimoku.py
-notes: Requires eval_run cartridge --regime-tf. Long entry fires when prior close is at or below prior kijun, current close crosses above kijun, current close is above kumo_top, and chikou close confirmation is positive; short mirrors below kijun and kumo_bottom. Phase 2 hard veto side-locks entries to TREND_BULL or TREND_BEAR.
+notes: Killed after the 2026-08-22 Curator-freeze bank in docs/LEDGER.md; PF_XBTUSD full and OOS remained fee-negative, and the pass_oos_gate=true row only beat a worse baseline. Historical replay flags remain useful for comparison. Requires eval_run cartridge --regime-tf. Long entry fires when prior close is at or below prior kijun, current close crosses above kijun, current close is above kumo_top, and chikou close confirmation is positive; short mirrors below kijun and kumo_bottom. Phase 2 hard veto side-locks entries to TREND_BULL or TREND_BEAR.
