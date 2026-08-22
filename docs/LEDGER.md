@@ -420,3 +420,32 @@ decision bars.
 
 Disposition: **killed forever** -- IS lose both symbols; do not revive
 `ichi_cloud_bias_tsmom_4h_v0`. Intern re-freeze after this bank; no family mill.
+
+## 2026-08-22 funding-in-returns smoke
+
+Paper-only CoS funding-in-returns smoke for the eval harness in PR #43 at HEAD
+`f78b22f`. The harness keeps `--apply-funding` default off; when enabled,
+held-bar funding is applied into `net_*` metrics.
+
+Evidence path: `/var/aura/evidence/evals/funding-smoke-20260822/`.
+
+Cartridge: `ichi_cloud_bias_tsmom_thin_v0` (`champion_control`) with thin spine
+flags and `--trial-count 39`.
+
+Coverage:
+- `--since 2025-08-20T08:00:00Z` failed closed with 9 funding gaps.
+- Contiguous pull used
+  `--since 2026-05-09T07:00:00Z` through `2026-08-22T05:00:00Z`
+  (2519 candles); `funding_missing_held_bars=0`.
+
+| Symbol | Fee-only OOS ATR | Fee-only DSR | Fee+funding OOS ATR | Fee+funding DSR | funding_drag_atr | funding_drag_points |
+|---|---:|---:|---:|---:|---:|---:|
+| XBT | 26.0176 | 0.6704 | 25.8748 | 0.6636 | 0.1428 | 80.81 |
+| ETH | 25.6014 | 0.6208 | 25.4097 | 0.6116 | 0.1917 | 3.09 |
+
+CoS verdict: **harness PASS** -- nonzero drag and `net_*` metrics differ. No
+cartridge status mutation. Intern remains frozen. Default eval remains fee-only
+until CoS opts into funding-on rescores.
+
+Follow-up: funding store gaps exist before May 2026; optional later gap-fill or
+longer contiguous pull can extend this evidence.
