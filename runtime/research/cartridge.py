@@ -38,6 +38,13 @@ EXIT_MODES = {
     "chandelier_trail",
 }
 REGIME_TYPES = {"adx", "er", "cloud_thickness", "none"}
+PHASE2_ABLATION_FIELDS = {"enabled", "label", "components"}
+PHASE2_COMPONENT_FIELDS = {
+    "adx_di",
+    "kumo_width_atr",
+    "htf_veto",
+    "dwell_hysteresis",
+}
 BASELINE_METRICS = {
     "total_pnl_points",
     "total_pnl_points_after_fees",
@@ -213,8 +220,14 @@ def validate_cartridge(
     _reject_unknown_fields(regime, REGIME_FIELDS, f"{label}: regime")
     _require_enum(regime, "type", REGIME_TYPES, f"{label}: regime")
     params = _require_mapping(regime, "params", f"{label}: regime")
-    if regime["type"] == "none" and params:
-        raise ValueError(f"{label}: regime.params must be empty when type is none")
+    if "phase2_ablation" in params:
+        _validate_phase2_ablation(params["phase2_ablation"], f"{label}: regime.params.phase2_ablation")
+    if regime["type"] == "none":
+        unsupported_params = sorted(set(params) - {"phase2_ablation"})
+        if unsupported_params:
+            raise ValueError(
+                f"{label}: regime.params must be empty when type is none except phase2_ablation"
+            )
 
     kill_criteria = _require_mapping(cartridge, "kill_criteria", label)
     _require_fields(kill_criteria, KILL_FIELDS, f"{label}: kill_criteria")
@@ -420,3 +433,17 @@ def _require_positive_number(values: Mapping[str, Any], field: str, label: str) 
     value = values[field]
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{label}: {field} must be a positive number")
+
+
+def _validate_phase2_ablation(value: Any, label: str) -> None:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{label} must be a mapping")
+    _require_fields(value, PHASE2_ABLATION_FIELDS, label)
+    _reject_unknown_fields(value, PHASE2_ABLATION_FIELDS, label)
+    _require_bool(value, "enabled", label)
+    _require_string(value, "label", label)
+    components = _require_mapping(value, "components", label)
+    _require_fields(components, PHASE2_COMPONENT_FIELDS, f"{label}: components")
+    _reject_unknown_fields(components, PHASE2_COMPONENT_FIELDS, f"{label}: components")
+    for field in PHASE2_COMPONENT_FIELDS:
+        _require_bool(components, field, f"{label}: components")

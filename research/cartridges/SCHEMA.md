@@ -149,6 +149,29 @@ regime:
   params: {}
 ```
 
+Draft Phase 2 ablation cartridges may carry explicit eval-only component
+metadata under `regime.params.phase2_ablation` while keeping
+`regime.type: none` for the local cartridge gate:
+
+```yaml
+regime:
+  type: none
+  params:
+    phase2_ablation:
+      enabled: true
+      label: AB-noADX
+      components:
+        adx_di: false
+        kumo_width_atr: true
+        htf_veto: true
+        dwell_hysteresis: true
+```
+
+`enabled: false` is the explicit no-Phase-2-veto ablation path. When omitted,
+existing cartridges keep the current default behavior: no local cartridge regime
+gate, and the Phase 2 CLI hard veto applies only when requested or required by a
+known trend cartridge id.
+
 Allowed `regime.type` values:
 
 - `none`: no regime filter.

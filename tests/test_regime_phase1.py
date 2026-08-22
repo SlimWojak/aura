@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stdout
+from dataclasses import replace
 import io
 import json
 from pathlib import Path
@@ -139,6 +140,62 @@ class RegimePhase1Tests(TestCase):
         self.assertLess(snapshots[-1].features["adx"], params.adx_strong)
         self.assertEqual("VOLATILE", snapshots[-1].features["dwell_pending_state"])
         self.assertIn("dwell_pending:VOLATILE:1", snapshots[-1].reasons)
+
+    def test_ablation_switches_can_remove_adx_di_and_width_requirements(self):
+        restrictive_params = RegimeParams(
+            tenkan=2,
+            kijun=3,
+            senkou_b=4,
+            displacement=2,
+            adx_period=3,
+            adx_weak=20,
+            adx_strong=101,
+            thin_kumo_atr=999,
+            flat_n=3,
+            flat_atr_fraction=0.05,
+            dwell_bars=1,
+        )
+        candles = [candle(index, 100 + index) for index in range(30)]
+
+        full = classify_series(candles, params=restrictive_params, tf="4h")
+        ablated = classify_series(
+            candles,
+            params=replace(
+                restrictive_params,
+                use_adx_di=False,
+                use_kumo_width_atr=False,
+            ),
+            tf="4h",
+        )
+
+        self.assertNotEqual(RegimeState.TREND_BULL, full[-1].state)
+        self.assertEqual(RegimeState.TREND_BULL, ablated[-1].state)
+
+    def test_ablation_switch_can_remove_dwell_hysteresis(self):
+        params = RegimeParams(
+            tenkan=2,
+            kijun=3,
+            senkou_b=4,
+            displacement=2,
+            adx_period=3,
+            adx_weak=20,
+            adx_strong=90,
+            thin_kumo_atr=0.1,
+            flat_n=3,
+            flat_atr_fraction=0.05,
+            dwell_bars=3,
+        )
+        candles = [candle(index, 100 + index) for index in range(25)]
+        candles.append(candle(25, 123))
+
+        snapshots = classify_series(
+            candles,
+            params=replace(params, use_dwell=False),
+            tf="4h",
+        )
+
+        self.assertEqual(RegimeState.VOLATILE, snapshots[-1].state)
+        self.assertNotIn("dwell_pending_state", snapshots[-1].features)
 
     def test_price_vs_kumo_uses_displaced_cloud_not_undisplaced_raw_spans(self):
         params = RegimeParams(

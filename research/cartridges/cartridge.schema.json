@@ -185,7 +185,34 @@
           "enum": ["adx", "er", "cloud_thickness", "none"]
         },
         "params": {
-          "type": "object"
+          "type": "object",
+          "properties": {
+            "phase2_ablation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["enabled", "label", "components"],
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "label": {"type": "string", "minLength": 1},
+                "components": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "adx_di",
+                    "kumo_width_atr",
+                    "htf_veto",
+                    "dwell_hysteresis"
+                  ],
+                  "properties": {
+                    "adx_di": {"type": "boolean"},
+                    "kumo_width_atr": {"type": "boolean"},
+                    "htf_veto": {"type": "boolean"},
+                    "dwell_hysteresis": {"type": "boolean"}
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },

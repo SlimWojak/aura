@@ -34,7 +34,11 @@ def classify_bar(
         )
     resolved_index = len(candles) - 1 if index is None else index
     series = build_feature_series(candles, params=params)
-    htf_context = _htf_context(htf_candles, params=params) if htf_candles is not None else None
+    htf_context = (
+        _htf_context(htf_candles, params=params)
+        if htf_candles is not None and params.use_htf_veto
+        else None
+    )
     return _candidate_snapshot(
         series,
         index=resolved_index,
@@ -58,7 +62,11 @@ def classify_series(
 
     resolved_tf = tf or params.regime_tf
     feature_series = build_feature_series(candles, params=params)
-    htf_context = _htf_context(htf_candles, params=params) if htf_candles is not None else None
+    htf_context = (
+        _htf_context(htf_candles, params=params)
+        if htf_candles is not None and params.use_htf_veto
+        else None
+    )
     snapshots: list[RegimeSnapshot] = []
     current_state: RegimeState | None = None
     pending_state: RegimeState | None = None
@@ -108,8 +116,10 @@ def _candidate_snapshot(
         features["htf_ltf_disagree"] = htf_disagree
     else:
         features["htf_ltf_disagree"] = False
+        if not params.use_htf_veto:
+            features["htf_veto_disabled"] = True
 
-    if _missing_required(features):
+    if _missing_required(features, params=params):
         return _snapshot(
             RegimeState.TRANSITION,
             confidence=0.0,
@@ -194,7 +204,7 @@ def _apply_dwell(
     pending_count: int,
     params: RegimeParams,
 ) -> tuple[RegimeSnapshot, RegimeState, RegimeState | None, int]:
-    if params.dwell_bars <= 1:
+    if not params.use_dwell or params.dwell_bars <= 1:
         return candidate, candidate.state, None, 0
 
     if current_state is None:
@@ -245,66 +255,77 @@ def _trend_stack(
     params: RegimeParams,
     direction: str,
 ) -> bool:
-    adx = features["adx"]
-    width = features["kumo_width_atr"]
-    if adx is None or width is None:
-        return False
-    if adx < params.adx_strong or width < params.thin_kumo_atr:
-        return False
+    if params.use_adx_di:
+        adx = features["adx"]
+        if adx is None or adx < params.adx_strong:
+            return False
+    if params.use_kumo_width_atr:
+        width = features["kumo_width_atr"]
+        if width is None or width < params.thin_kumo_atr:
+            return False
     if features["flat_spanb_bars"] >= params.flat_n:
         return False
     if direction == "bull":
+        di_agrees = True if not params.use_adx_di else bool(features["di_bullish"])
         return (
             features["price_vs_kumo"] == "above"
             and features["tk_align"] == "bullish"
             and features["chikou_proxy"] == "bullish"
-            and features["di_bullish"]
+            and di_agrees
         )
+    di_agrees = True if not params.use_adx_di else bool(features["di_bearish"])
     return (
         features["price_vs_kumo"] == "below"
         and features["tk_align"] == "bearish"
         and features["chikou_proxy"] == "bearish"
-        and features["di_bearish"]
+        and di_agrees
     )
 
 
 def _outside_weak_or_conflicted(features: Mapping[str, Any], *, params: RegimeParams) -> bool:
-    adx = features["adx"]
     location = features["price_vs_kumo"]
     tk = features["tk_align"]
+    adx_is_weak = (
+        params.use_adx_di
+        and (features["adx"] is None or features["adx"] < params.adx_strong)
+    )
     di_conflicts = (
-        (location == "above" and not features["di_bullish"])
-        or (location == "below" and not features["di_bearish"])
+        params.use_adx_di
+        and (
+            (location == "above" and not features["di_bullish"])
+            or (location == "below" and not features["di_bearish"])
+        )
     )
     tk_conflicts = (
         (location == "above" and tk != "bullish")
         or (location == "below" and tk != "bearish")
     )
-    return adx is None or adx < params.adx_strong or tk_conflicts or di_conflicts
+    return adx_is_weak or tk_conflicts or di_conflicts
 
 
 def _range_condition(features: Mapping[str, Any], *, params: RegimeParams) -> bool:
-    adx = features["adx"]
     thin_and_weak = (
-        features["kumo_width_atr"] is not None
+        params.use_kumo_width_atr
+        and params.use_adx_di
+        and features["kumo_width_atr"] is not None
         and features["kumo_width_atr"] < params.thin_kumo_atr
-        and adx is not None
-        and adx < params.adx_weak
+        and features["adx"] is not None
+        and features["adx"] < params.adx_weak
     )
     both_tk_flat = features["flat_tenkan_bars"] >= params.flat_n and features["flat_kijun_bars"] >= params.flat_n
     return features["price_vs_kumo"] == "inside" or thin_and_weak or both_tk_flat
 
 
-def _missing_required(features: Mapping[str, Any]) -> bool:
-    required = (
+def _missing_required(features: Mapping[str, Any], *, params: RegimeParams) -> bool:
+    required = [
         "price_vs_kumo",
         "tk_align",
         "chikou_proxy",
-        "adx",
-        "plus_di",
-        "minus_di",
-        "kumo_width_atr",
-    )
+    ]
+    if params.use_adx_di:
+        required.extend(("adx", "plus_di", "minus_di"))
+    if params.use_kumo_width_atr:
+        required.append("kumo_width_atr")
     for key in required:
         if features.get(key) in (None, "missing"):
             return True

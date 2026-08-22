@@ -50,6 +50,12 @@ _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
 _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
 _TRAIL_EXIT_MODES = {"kijun_trail", "atr_stop", "chandelier_trail"}
 _SAME_BAR_ENTRY_BLOCK_EXIT_REASONS = _TRAIL_EXIT_MODES | {"time_stop"}
+_PHASE2_COMPONENT_DEFAULTS = {
+    "adx_di": True,
+    "kumo_width_atr": True,
+    "htf_veto": True,
+    "dwell_hysteresis": True,
+}
 _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_v0",
     "ichi_params_20_60_trend_timestop_v0",
@@ -191,14 +197,26 @@ def run_backtest_cartridge(
     allowed_entry_sides = None if allowed_sides == {"long", "short"} else allowed_sides
     series = compute_ichimoku(normalized, params=params)
     cartridge_gate_provider = _entry_gate_provider(normalized, series=series, cartridge=cartridge)
+    phase2_config = _phase2_ablation_config(cartridge)
+    phase2_regime_enabled = safe_regime_tf is not None and bool(phase2_config["enabled"])
+    phase2_regime_params = (
+        _phase2_regime_params_from_cartridge(
+            cartridge,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+        )
+        if phase2_regime_enabled
+        else None
+    )
     regime_gate_provider = (
         _regime_entry_gate_provider(
             candles,
             symbol=safe_symbol,
             regime_tf=safe_regime_tf,
             regime_htf=safe_regime_htf,
+            params=phase2_regime_params,
         )
-        if safe_regime_tf is not None
+        if phase2_regime_enabled
         else None
     )
     confirm_gate_provider = (
@@ -245,11 +263,12 @@ def run_backtest_cartridge(
         atr_period=atr_period,
         trial_count=trial_count,
     )
-    if regime_gate_provider is not None:
+    if regime_gate_provider is not None and phase2_regime_params is not None:
         report["regime_gate"] = {
             "enabled": True,
             "tf": safe_regime_tf,
-            "htf": safe_regime_htf,
+            "htf": phase2_regime_params.htf_tf,
+            "ablation": _phase2_report_metadata(phase2_config, phase2_regime_params),
             "policy": (
                 "TREND_BULL allows long only; TREND_BEAR allows short only; "
                 "RANGE/VOLATILE/TRANSITION deny new entries. Exits always "
@@ -257,6 +276,14 @@ def run_backtest_cartridge(
                 "flattens an open side once the current regime no longer "
                 "permits that side."
             ),
+        }
+    elif safe_regime_tf is not None and not bool(phase2_config["enabled"]):
+        report["regime_gate"] = {
+            "enabled": False,
+            "tf": safe_regime_tf,
+            "htf": safe_regime_htf,
+            "ablation": dict(phase2_config),
+            "policy": "Phase 2 hard veto explicitly disabled by this draft ablation cartridge.",
         }
     if confirm_symbol is not None:
         report["confirm_gate"] = {
@@ -1336,15 +1363,17 @@ def _regime_entry_gate_provider(
     symbol: str,
     regime_tf: str,
     regime_htf: str | None,
+    params: RegimeParams | None = None,
 ) -> _EntryGateProvider:
+    resolved_params = params if params is not None else RegimeParams(regime_tf=regime_tf, htf_tf=regime_htf)
+    effective_htf = resolved_params.htf_tf if resolved_params.use_htf_veto else None
     regime_candles = resample_1h_candles(candles, symbol=symbol, target_tf=regime_tf)
     htf_candles = (
-        resample_1h_candles(candles, symbol=symbol, target_tf=regime_htf)
-        if regime_htf is not None
+        resample_1h_candles(candles, symbol=symbol, target_tf=effective_htf)
+        if effective_htf is not None
         else None
     )
-    params = RegimeParams(regime_tf=regime_tf, htf_tf=regime_htf)
-    snapshots = classify_series(regime_candles, params=params, tf=regime_tf, htf_candles=htf_candles)
+    snapshots = classify_series(regime_candles, params=resolved_params, tf=regime_tf, htf_candles=htf_candles)
     snapshot_as_of = [
         int(snapshot.as_of)
         for snapshot in snapshots
@@ -1390,6 +1419,7 @@ def _regime_entry_gate_provider(
                 "tf": snapshot.tf,
                 "confidence": _stable_float(snapshot.confidence),
                 "reasons": reasons,
+                "phase2_components": _phase2_component_state(resolved_params),
             },
         }
 
@@ -1659,7 +1689,75 @@ def _combine_entry_gate_providers(
 
 
 def _cartridge_requires_phase2_regime(cartridge: Mapping[str, Any]) -> bool:
+    phase2_config = _phase2_ablation_config(cartridge)
+    if bool(phase2_config["explicit"]):
+        return bool(phase2_config["enabled"])
     return str(cartridge.get("id", "")) in _PHASE2_REGIME_REQUIRED_CARTRIDGES
+
+
+def _phase2_ablation_config(cartridge: Mapping[str, Any]) -> dict[str, Any]:
+    regime = _mapping(cartridge, "regime")
+    params = _mapping(regime, "params")
+    raw_config = params.get("phase2_ablation")
+    if raw_config is None:
+        return {
+            "explicit": False,
+            "enabled": True,
+            "label": "default",
+            "components": dict(_PHASE2_COMPONENT_DEFAULTS),
+        }
+    if not isinstance(raw_config, Mapping):
+        raise ValueError("regime.params.phase2_ablation must be a mapping")
+    raw_components = raw_config.get("components")
+    if not isinstance(raw_components, Mapping):
+        raise ValueError("regime.params.phase2_ablation.components must be a mapping")
+    components = {
+        key: _required_bool(raw_components.get(key), f"regime.params.phase2_ablation.components.{key}")
+        for key in _PHASE2_COMPONENT_DEFAULTS
+    }
+    return {
+        "explicit": True,
+        "enabled": _required_bool(raw_config.get("enabled"), "regime.params.phase2_ablation.enabled"),
+        "label": str(raw_config.get("label", "")),
+        "components": components,
+    }
+
+
+def _phase2_regime_params_from_cartridge(
+    cartridge: Mapping[str, Any],
+    *,
+    regime_tf: str,
+    regime_htf: str | None,
+) -> RegimeParams:
+    config = _phase2_ablation_config(cartridge)
+    components = _mapping(config, "components")
+    use_htf_veto = bool(components["htf_veto"])
+    return RegimeParams(
+        regime_tf=regime_tf,
+        htf_tf=regime_htf if use_htf_veto else None,
+        use_adx_di=bool(components["adx_di"]),
+        use_kumo_width_atr=bool(components["kumo_width_atr"]),
+        use_htf_veto=use_htf_veto,
+        use_dwell=bool(components["dwell_hysteresis"]),
+    )
+
+
+def _phase2_component_state(params: RegimeParams) -> dict[str, bool]:
+    return {
+        "adx_di": params.use_adx_di,
+        "kumo_width_atr": params.use_kumo_width_atr,
+        "htf_veto": params.use_htf_veto,
+        "dwell_hysteresis": params.use_dwell,
+    }
+
+
+def _phase2_report_metadata(config: Mapping[str, Any], params: RegimeParams) -> dict[str, Any]:
+    return {
+        "explicit": bool(config["explicit"]),
+        "enabled": bool(config["enabled"]),
+        "label": str(config["label"]),
+        "components": _phase2_component_state(params),
+    }
 
 
 def _confirm_symbol_from_cartridge(cartridge: Mapping[str, Any]) -> str | None:
@@ -2838,6 +2936,12 @@ def _nonnegative_float(value: Any, field_name: str) -> float:
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
         raise ValueError(f"{field_name} must be a non-negative number")
     return float(value)
+
+
+def _required_bool(value: Any, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a boolean")
+    return value
 
 
 def _required_float(value: float | None, field_name: str) -> float:

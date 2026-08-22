@@ -22,6 +22,18 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
                 "ichi_kumo_break_trend_v0",
+                "ichi_p2_ab0_eth_v0",
+                "ichi_p2_ab0_xbt_v0",
+                "ichi_p2_abfull_eth_v0",
+                "ichi_p2_abfull_xbt_v0",
+                "ichi_p2_abnoadx_eth_v0",
+                "ichi_p2_abnoadx_xbt_v0",
+                "ichi_p2_abnodwell_eth_v0",
+                "ichi_p2_abnodwell_xbt_v0",
+                "ichi_p2_abnohtf_eth_v0",
+                "ichi_p2_abnohtf_xbt_v0",
+                "ichi_p2_abnowidth_eth_v0",
+                "ichi_p2_abnowidth_xbt_v0",
                 "ichi_params_10_30_trend_v0",
                 "ichi_params_20_60_v0",
                 "ichi_params_20_60_er_v0",
@@ -54,6 +66,12 @@ class ResearchCartridgeTests(TestCase):
                 if cartridge["id"] in {
                     "ichi_params_20_60_trend_btc_confirm_eth_v0",
                     "ichi_v0_trend_eth_primary_v0",
+                    "ichi_p2_ab0_eth_v0",
+                    "ichi_p2_abfull_eth_v0",
+                    "ichi_p2_abnoadx_eth_v0",
+                    "ichi_p2_abnodwell_eth_v0",
+                    "ichi_p2_abnohtf_eth_v0",
+                    "ichi_p2_abnowidth_eth_v0",
                 }:
                     self.assertEqual("PF_ETHUSD", cartridge["symbol"])
                 else:
@@ -66,6 +84,8 @@ class ResearchCartridgeTests(TestCase):
                         "ichi_tk_strong_trend_only_v0",
                         "ichi_v0_baseline",
                         "ichi_params_20_60_trend_v0",
+                        "ichi_p2_abfull_eth_v0",
+                        "ichi_p2_abfull_xbt_v0",
                     },
                 )
                 allowed_sides = set(cartridge["entry_rules"]["allowed_sides"])
@@ -334,6 +354,68 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(14, atr_stop["exit_rules"]["atr_period"])
         self.assertEqual(3.0, atr_stop["exit_rules"]["atr_mult"])
         self.assertIn("trades were 4 < 12", atr_stop["kill_criteria"]["notes"])
+
+    def test_phase2_ablation_cartridges_load_requested_components(self):
+        ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")
+        full = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_abfull_xbt_v0.yaml")
+        no_adx = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_abnoadx_xbt_v0.yaml")
+        no_width = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_abnowidth_eth_v0.yaml")
+        no_htf = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_abnohtf_eth_v0.yaml")
+        no_dwell = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_abnodwell_eth_v0.yaml")
+
+        for cartridge in (ab0, full, no_adx, no_width, no_htf, no_dwell):
+            with self.subTest(cartridge=cartridge["id"]):
+                self.assertEqual("draft", cartridge["status"])
+                self.assertEqual(20, cartridge["ichimoku"]["tenkan"])
+                self.assertEqual(60, cartridge["ichimoku"]["kijun"])
+                self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
+                self.assertEqual(
+                    "atr_normalized_total_return",
+                    cartridge["kill_criteria"]["baseline_metric"],
+                )
+                self.assertIn("70/30 fee-on OOS", cartridge["kill_criteria"]["notes"])
+                self.assertIn("honest trial N", cartridge["notes"])
+
+        self.assertFalse(ab0["regime"]["params"]["phase2_ablation"]["enabled"])
+        self.assertEqual(
+            {
+                "adx_di": True,
+                "kumo_width_atr": True,
+                "htf_veto": True,
+                "dwell_hysteresis": True,
+            },
+            full["regime"]["params"]["phase2_ablation"]["components"],
+        )
+        self.assertFalse(no_adx["regime"]["params"]["phase2_ablation"]["components"]["adx_di"])
+        self.assertFalse(
+            no_width["regime"]["params"]["phase2_ablation"]["components"]["kumo_width_atr"]
+        )
+        self.assertFalse(no_htf["regime"]["params"]["phase2_ablation"]["components"]["htf_veto"])
+        self.assertFalse(
+            no_dwell["regime"]["params"]["phase2_ablation"]["components"]["dwell_hysteresis"]
+        )
+
+    def test_validate_rejects_invalid_phase2_ablation_component(self):
+        valid = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_abfull_xbt_v0.yaml")
+        invalid = dict(valid)
+        invalid["regime"] = {
+            "type": "none",
+            "params": {
+                "phase2_ablation": {
+                    "enabled": True,
+                    "label": "AB-bad",
+                    "components": {
+                        "adx_di": "off",
+                        "kumo_width_atr": True,
+                        "htf_veto": True,
+                        "dwell_hysteresis": True,
+                    },
+                }
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "adx_di"):
+            validate_cartridge(invalid)
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")

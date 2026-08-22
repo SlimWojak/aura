@@ -117,6 +117,17 @@ python -m runtime.tools.eval_run matrix \
 `--metric simple` is available for a percent-return matrix, but keep decisions
 should use the same normalized metric across candidate and baseline rows.
 
+## Phase 2 regime ablations
+
+The Phase 2 ablation cartridges in `docs/REGIME.md` are draft-only eval
+experiments. Run all twelve PF_XBTUSD/PF_ETHUSD cartridges with forced 70/30
+fee-on OOS and `--trial-count 12`; AB-0 omits the Phase 2 gate, while AB-FULL
+and each single-component removal use `--regime-tf 4h --regime-htf 1d`.
+
+Use ATR-normalized return stats for the decision memo. A component earns its
+place only if removing it materially worsens ATR Calmar/MAR or DSR on both
+symbols versus AB-FULL. Do not mutate cartridge statuses from these draft runs.
+
 ## PBO / CSCV v0
 
 The `matrix` command loads saved `report.json` files containing
