@@ -42,10 +42,11 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 
 ### P1 — Thin paper runtime (next)
 1. [x] `runtime/risk` stub — admit/reject against RISK_POLICY.md (no LLM in the gate).
-2. [x] `runtime/evidence` + smoke stub — future runner can gate proposals and append decision JSONL; full `runtime/runner` still pending.
-3. `runtime/scribe` — daily one-pager from JSONL (template already exists).
-4. systemd user units on dexter: runner/risk/scribe heartbeats (paper only).
-5. Kill drills A–C automated once.
+2. [x] `runtime/evidence` + smoke stub — runner can gate proposals and append decision JSONL.
+3. [x] First `runtime/runner` supervised paper loop — human trigger only; reads futures-paper status/positions, calls `admit()`, writes JSONL, and invokes only `kraken futures paper buy|sell` after allow.
+4. `runtime/scribe` — daily one-pager from JSONL (template already exists).
+5. No systemd runner yet. Any future user units require a separate explicit design/review; this loop remains human-triggered.
+6. Kill drills A–C automated once.
 
 Exit: CoS can request a tiny supervised paper action end-to-end with traces; cold kill drill passes.
 
@@ -79,4 +80,4 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 1. [x] Install Claude CLI on dexter and smoke version from SSH.
 2. [x] Add `ops/delegates.md`.
 3. Cloud-agent PR: P1 risk-gate stub + JSONL writer (no strategy).
-4. First supervised runner loop (still human-triggered).
+4. [x] First supervised runner loop (still human-triggered).

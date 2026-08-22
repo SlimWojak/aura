@@ -54,8 +54,10 @@ Use dexter for anything that depends on durable paper runtime state:
 Read-only safe smoke commands should be wrapped or documented before use. The
 starter helper is `scripts/dexter_smoke.sh`.
 
-Any future human-triggered futures-paper order must call `runtime.risk.admit()`
-and append a decision JSONL event before invoking `kraken futures paper ...`.
+Any human-triggered futures-paper order must call `runtime.risk.admit()` before
+invoking `kraken futures paper ...`. Rejects still append decision JSONL with no
+venue call; allowed orders append JSONL with the futures-paper response after
+the CLI returns.
 
 ## Local Claude/Codex/Kimi delegates
 
