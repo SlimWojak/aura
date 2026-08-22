@@ -233,7 +233,7 @@ class EvalHarnessTests(TestCase):
         self.assertIn("long", {trade["direction"] for trade in strong["trades"]})
 
     def test_plain_tk_cross_uses_close_vs_cloud_without_both_lines_outside(self):
-        closes = [140, 140, 140, 140, 90, 110, 121, 122]
+        closes = [140, 140, 140, 90, 110, 121, 122, 123]
         candles = [candle(index, close) for index, close in enumerate(closes)]
 
         plain = run_backtest_cartridge(
@@ -433,7 +433,7 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(long_signals)
 
     def test_kumo_break_cartridge_detects_close_through_cloud(self):
-        closes = [140, 140, 140, 140, 90, 110, 121, 122]
+        closes = [140, 140, 140, 90, 110, 121, 122, 123]
         report = run_backtest_cartridge(
             [candle(index, close) for index, close in enumerate(closes)],
             cartridge=kumo_break_cartridge(),
