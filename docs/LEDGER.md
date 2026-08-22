@@ -494,3 +494,20 @@ Run context: HEAD `61351e1`; `--since 2026-05-09T07:00:00Z`; thin spine;
 CoS verdict: funding drag is small and causes no status flips. Default eval
 remains fee-only; Intern remains frozen. Short-window caveat applies: this is
 not full-history Track A.
+
+## 2026-08-22 IC feature screen harness stub
+
+This is a harness stub only, not a dexter run result. The next locked brain-change
+step is a per-bar IC / feature screen over stored `PF_XBTUSD` and `PF_ETHUSD`
+1h OHLCV before any survivor-derived 15m comparison or Track A bake-off spend.
+
+Planned evidence path pattern:
+`/var/aura/evidence/evals/ic-screen-YYYYMMDD/` with `report.json`,
+`scores.csv`, and `SUMMARY.md`.
+
+Harness contract: forward ATR-normalized returns at horizons 4/12/24/48; HAC
+CIs for overlapping returns; Benjamini-Hochberg q-values across emitted feature
+tests; feature dead when usable CIs span 0 on both symbols.
+
+This stub banks no YAML status changes, no cartridge revival, no Intern unlock,
+no lower-timeframe ingest, no live scopes, and no Track A loosening.

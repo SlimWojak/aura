@@ -401,6 +401,24 @@ Backtest stored OHLCV and write an evidence report:
 python3.12 -m runtime.tools.eval_run backtest --symbol PF_XBTUSD --tf 1h
 ```
 
+Screen closed-bar Ichimoku/regime features before spending Track A bake-offs:
+
+```bash
+python3.12 -m runtime.tools.eval_run ic-screen \
+  --symbols PF_XBTUSD,PF_ETHUSD \
+  --tf 1h \
+  --horizons 4,12,24,48 \
+  --output-id ic-screen-20260822
+```
+
+The IC screen reads stored OHLCV only and writes
+`${AURA_ROOT:-/var/aura}/evidence/evals/ic-screen-YYYYMMDD/{report.json,scores.csv,SUMMARY.md}`.
+It scores continuous features by Pearson IC and categorical features by
+conditional mean forward ATR-normalized return. Overlapping horizons use
+Newey-West/HAC CIs, and Benjamini-Hochberg q-values are reported across emitted
+feature tests. It is a paper-only filter; it does not place orders, change
+cartridge status, unlock Intern, or weaken Track A.
+
 Full multi-year 1h stores are supported. The backtest computes the Ichimoku
 series once, then walks indexed signals/trades over that precomputed series
 instead of recomputing indicator history at every bar. For long histories,
