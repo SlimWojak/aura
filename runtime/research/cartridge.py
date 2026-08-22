@@ -18,6 +18,7 @@ ENTRY_MODES = {"always_on", "tk_cross", "cloud_bias", "tk_cloud_bias"}
 SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
 TK_RULES = {"tenkan_over_kijun_for_long_under_for_short", "tk_cross_only", "none"}
+CHIKOU_MODES = {"close", "strict"}
 EXIT_MODES = {"bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop"}
 REGIME_TYPES = {"adx", "er", "cloud_thickness", "none"}
 BASELINE_METRICS = {"total_pnl_points", "max_drawdown_points", "win_rate", "profit_factor"}
@@ -46,6 +47,7 @@ ENTRY_FIELDS = {
     "require_close_vs_cloud",
     "require_tk_state",
     "require_chikou_confirmation",
+    "chikou_mode",
 }
 EXIT_FIELDS = {"mode", "close_on_flat", "close_on_opposite", "max_bars_in_trade"}
 REGIME_FIELDS = {"type", "params"}
@@ -115,6 +117,7 @@ def validate_cartridge(
     )
     _require_enum(entry_rules, "require_tk_state", TK_RULES, f"{label}: entry_rules")
     _require_bool(entry_rules, "require_chikou_confirmation", f"{label}: entry_rules")
+    _require_enum(entry_rules, "chikou_mode", CHIKOU_MODES, f"{label}: entry_rules")
     allowed_sides = _require_list(entry_rules, "allowed_sides", f"{label}: entry_rules")
     if not allowed_sides:
         raise ValueError(f"{label}: entry_rules.allowed_sides must not be empty")

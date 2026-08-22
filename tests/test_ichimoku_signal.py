@@ -71,6 +71,20 @@ class IchimokuSignalTests(TestCase):
         self.assertTrue(signal.features["tenkan_below_kijun"])
         self.assertTrue(signal.features["chikou_below_reference"])
 
+    def test_strict_chikou_requires_close_to_clear_reference_high(self):
+        candles = trending_candles(direction=1)
+        candles[63] = candle(63, high=126, low=99, close=100)
+        series = compute_ichimoku(candles)
+
+        baseline = signal_from_series(series, chikou_mode="close")
+        strict = signal_from_series(series, chikou_mode="strict")
+
+        self.assertEqual("long", baseline.bias)
+        self.assertEqual("flat", strict.bias)
+        self.assertTrue(baseline.features["chikou_above_reference"])
+        self.assertFalse(strict.features["chikou_above_reference"])
+        self.assertEqual(126.0, strict.components["chikou_reference_high"])
+
     def test_cli_compute_reads_temp_aura_root_jsonl(self):
         write_market_candles(self.aura_root, trending_candles(direction=1))
 

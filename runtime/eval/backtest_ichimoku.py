@@ -25,6 +25,7 @@ from typing import Any, Callable, Mapping, Sequence
 from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
 from runtime.market import ohlcv_path, read_candles, validate_symbol, validate_tf
+from runtime.research.cartridge import load_cartridge, load_cartridges
 
 
 BACKTEST_REPORT_SCHEMA = "aura.backtest_report.v1"
@@ -36,11 +37,15 @@ MODEL_DESCRIPTION = (
     "no fees, no slippage"
 )
 FAST_ENGINE = "precomputed_ichimoku_series_v1"
+CARTRIDGE_ENGINE = "precomputed_ichimoku_cartridge_v1"
 REFERENCE_ENGINE = "reference_slice_recompute_v1"
+CARTRIDGE_ROOT = Path(__file__).resolve().parents[2] / "research" / "cartridges"
 
 _DIRECTION_BY_BIAS: dict[Bias, int] = {"long": 1, "short": -1, "flat": 0}
 _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
+_ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
 _SignalProvider = Callable[[int], IchimokuSignal]
+_EntryGateProvider = Callable[[int], Mapping[str, Any]]
 
 
 def run_backtest(
@@ -93,6 +98,69 @@ def run_backtest(
         ),
         signal_provider=lambda index: signal_from_series(series, index=index),
     )
+
+
+def run_backtest_cartridge(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    cartridge: Mapping[str, Any],
+    symbol: str | None = None,
+    tf: str | None = None,
+    min_bars: int | None = None,
+) -> dict[str, Any]:
+    """Run a supported paper research cartridge over supplied candles."""
+
+    unsupported = unsupported_cartridge_reasons(cartridge)
+    if unsupported:
+        raise NotImplementedError(
+            f"cartridge {cartridge.get('id', '<unknown>')} is not runnable: "
+            + "; ".join(unsupported)
+        )
+
+    safe_symbol = validate_symbol(symbol if symbol is not None else str(cartridge["symbol"]))
+    safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
+    params = _params_from_cartridge(cartridge)
+    resolved_min_bars = min_bars if min_bars is not None else params.minimum_candles
+    normalized = _prepare_candles(
+        candles,
+        min_bars=resolved_min_bars,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        params=params,
+    )
+    if isinstance(normalized, dict):
+        _attach_cartridge_metadata(normalized, cartridge=cartridge, runnable=True)
+        return normalized
+
+    entry_rules = _mapping(cartridge, "entry_rules")
+    chikou_mode = str(entry_rules["chikou_mode"])
+    series = compute_ichimoku(normalized, params=params)
+    entry_gate_provider = _entry_gate_provider(normalized, cartridge=cartridge)
+    report = _score_backtest(
+        normalized,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        params=params,
+        min_bars=resolved_min_bars,
+        engine=CARTRIDGE_ENGINE,
+        lookahead_note=(
+            "Signals are indexed from one precomputed Ichimoku series. "
+            "Displaced spans use past raw Ichimoku values. Chikou mode is "
+            f"{chikou_mode!r}; strict mode compares current close with "
+            "high/low[t-displacement]. Entry regime gates are precomputed once "
+            "and only block new entries. Execution uses next open when available, "
+            "else current close."
+        ),
+        signal_provider=lambda index: signal_from_series(
+            series,
+            index=index,
+            chikou_mode=chikou_mode,  # type: ignore[arg-type]
+        ),
+        entry_gate_provider=entry_gate_provider,
+        allowed_entry_sides=set(entry_rules["allowed_sides"]),
+    )
+    _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
+    return report
 
 
 def run_backtest_reference(
@@ -177,6 +245,8 @@ def _score_backtest(
     engine: str,
     lookahead_note: str,
     signal_provider: _SignalProvider,
+    entry_gate_provider: _EntryGateProvider | None = None,
+    allowed_entry_sides: set[str] | None = None,
 ) -> dict[str, Any]:
     if min_bars <= 0:
         raise ValueError("min_bars must be positive")
@@ -194,6 +264,21 @@ def _score_backtest(
 
     for index in range(start_index, len(candles)):
         signal = signal_provider(index)
+        entry_gate = (
+            _normalize_entry_gate(entry_gate_provider(index))
+            if entry_gate_provider is not None
+            else _ALLOW_ENTRY_GATE
+        )
+        if (
+            allowed_entry_sides is not None
+            and signal.bias != "flat"
+            and signal.bias not in allowed_entry_sides
+        ):
+            entry_gate = {
+                "allowed": False,
+                "reason": "side_not_allowed",
+                "values": {"bias": signal.bias},
+            }
         final_bias = signal.bias
         bias_counts[signal.bias] += 1
         desired_direction = _DIRECTION_BY_BIAS[signal.bias]
@@ -210,6 +295,8 @@ def _score_backtest(
                 "execution_basis": execution["basis"],
             }
         )
+        if entry_gate_provider is not None or allowed_entry_sides is not None:
+            signal_trace[-1]["entry_gate"] = entry_gate
 
         current_direction = int(position["direction"]) if position is not None else 0
         if current_direction != 0 and desired_direction != current_direction:
@@ -224,7 +311,7 @@ def _score_backtest(
             max_drawdown_points = max(max_drawdown_points, peak_equity_points - equity_points)
             position = None
 
-        if desired_direction != 0 and position is None:
+        if desired_direction != 0 and position is None and bool(entry_gate["allowed"]):
             position = _open_position(
                 direction=desired_direction,
                 entry_execution=execution,
@@ -321,6 +408,311 @@ def backtest_from_store(
         "last_ts_ms": _candle_ts_ms(windowed_candles[-1]) if windowed_candles else None,
     }
     return report
+
+
+def cartridge_backtest_from_store(
+    *,
+    cartridge_id: str | None = None,
+    cartridge_path: str | Path | None = None,
+    symbol: str | None = None,
+    tf: str | None = None,
+    aura_root: str | Path | None = None,
+    min_bars: int | None = None,
+    max_bars: int | None = None,
+    since_ts_ms: int | None = None,
+    cartridge_root: str | Path = CARTRIDGE_ROOT,
+) -> dict[str, Any]:
+    """Read stored OHLCV and return a supported cartridge backtest report."""
+
+    cartridge = resolve_cartridge(
+        cartridge_id=cartridge_id,
+        cartridge_path=cartridge_path,
+        cartridge_root=cartridge_root,
+    )
+    unsupported = unsupported_cartridge_reasons(cartridge)
+    if unsupported:
+        raise NotImplementedError(
+            f"cartridge {cartridge.get('id', '<unknown>')} is not runnable: "
+            + "; ".join(unsupported)
+        )
+    safe_symbol = validate_symbol(symbol if symbol is not None else str(cartridge["symbol"]))
+    safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
+    candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
+    windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    report = run_backtest_cartridge(
+        windowed_candles,
+        cartridge=cartridge,
+        symbol=safe_symbol,
+        tf=safe_tf,
+        min_bars=min_bars,
+    )
+    report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
+    report["source_candle_count"] = len(candles)
+    report["window"] = {
+        "since_ts_ms": since_ts_ms,
+        "max_bars": max_bars,
+        "first_ts_ms": _candle_ts_ms(windowed_candles[0]) if windowed_candles else None,
+        "last_ts_ms": _candle_ts_ms(windowed_candles[-1]) if windowed_candles else None,
+    }
+    return report
+
+
+def resolve_cartridge(
+    *,
+    cartridge_id: str | None = None,
+    cartridge_path: str | Path | None = None,
+    cartridge_root: str | Path = CARTRIDGE_ROOT,
+) -> dict[str, Any]:
+    """Load one cartridge by id or explicit path."""
+
+    if bool(cartridge_id) == bool(cartridge_path):
+        raise ValueError("provide exactly one of cartridge_id or cartridge_path")
+    if cartridge_path is not None:
+        return load_cartridge(cartridge_path)
+    assert cartridge_id is not None
+    if "/" in cartridge_id or "\\" in cartridge_id or cartridge_id.endswith(".yaml"):
+        raise ValueError("cartridge id must be an id, not a path")
+    path = Path(cartridge_root) / f"{cartridge_id}.yaml"
+    if not path.exists():
+        raise ValueError(f"unknown cartridge id: {cartridge_id}")
+    return load_cartridge(path)
+
+
+def runnable_cartridge_ids(cartridge_root: str | Path = CARTRIDGE_ROOT) -> list[str]:
+    """Return currently runnable cartridge ids in stable order."""
+
+    return [
+        str(cartridge["id"])
+        for cartridge in load_cartridges(cartridge_root)
+        if not unsupported_cartridge_reasons(cartridge)
+    ]
+
+
+def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
+    """Explain why a cartridge cannot yet run in the minimal eval harness."""
+
+    reasons: list[str] = []
+    entry_rules = _mapping(cartridge, "entry_rules")
+    exit_rules = _mapping(cartridge, "exit_rules")
+    regime = _mapping(cartridge, "regime")
+
+    if entry_rules["mode"] != "always_on":
+        reasons.append(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
+    if entry_rules["require_close_vs_cloud"] != "above_for_long_below_for_short":
+        reasons.append(
+            "entry_rules.require_close_vs_cloud="
+            f"{entry_rules['require_close_vs_cloud']!r} is not wired"
+        )
+    if entry_rules["require_tk_state"] != "tenkan_over_kijun_for_long_under_for_short":
+        reasons.append(
+            "entry_rules.require_tk_state="
+            f"{entry_rules['require_tk_state']!r} is not wired"
+        )
+    if not bool(entry_rules["require_chikou_confirmation"]):
+        reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
+    if entry_rules["chikou_mode"] not in {"close", "strict"}:
+        reasons.append(f"entry_rules.chikou_mode={entry_rules['chikou_mode']!r} is not wired")
+    if exit_rules["mode"] != "bias_flip":
+        reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
+    if not bool(exit_rules["close_on_flat"]):
+        reasons.append("exit_rules.close_on_flat=false is not wired")
+    if not bool(exit_rules["close_on_opposite"]):
+        reasons.append("exit_rules.close_on_opposite=false is not wired")
+    if exit_rules["max_bars_in_trade"] is not None:
+        reasons.append("exit_rules.max_bars_in_trade is not wired")
+    if regime["type"] not in {"none", "adx"}:
+        reasons.append(f"regime.type={regime['type']!r} is not wired")
+
+    return reasons
+
+
+def compute_wilder_adx(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    period: int,
+) -> list[float | None]:
+    """Compute Wilder ADX values aligned to the input candles."""
+
+    if period <= 0:
+        raise ValueError("ADX period must be positive")
+
+    highs = [
+        _finite_float(candle.get("high"), field_name=f"candles[{index}].high")
+        for index, candle in enumerate(candles)
+    ]
+    lows = [
+        _finite_float(candle.get("low"), field_name=f"candles[{index}].low")
+        for index, candle in enumerate(candles)
+    ]
+    closes = [
+        _finite_float(candle.get("close"), field_name=f"candles[{index}].close")
+        for index, candle in enumerate(candles)
+    ]
+    count = len(candles)
+    adx: list[float | None] = [None] * count
+    if count <= period:
+        return adx
+
+    true_ranges = [0.0] * count
+    plus_dm = [0.0] * count
+    minus_dm = [0.0] * count
+    for index in range(1, count):
+        high = highs[index]
+        low = lows[index]
+        previous_high = highs[index - 1]
+        previous_low = lows[index - 1]
+        previous_close = closes[index - 1]
+        true_ranges[index] = max(
+            high - low,
+            abs(high - previous_close),
+            abs(low - previous_close),
+        )
+        up_move = high - previous_high
+        down_move = previous_low - low
+        plus_dm[index] = up_move if up_move > down_move and up_move > 0 else 0.0
+        minus_dm[index] = down_move if down_move > up_move and down_move > 0 else 0.0
+
+    dx: list[float | None] = [None] * count
+    smoothed_tr = sum(true_ranges[1 : period + 1])
+    smoothed_plus_dm = sum(plus_dm[1 : period + 1])
+    smoothed_minus_dm = sum(minus_dm[1 : period + 1])
+    dx[period] = _dx(smoothed_tr, smoothed_plus_dm, smoothed_minus_dm)
+    for index in range(period + 1, count):
+        smoothed_tr = smoothed_tr - (smoothed_tr / period) + true_ranges[index]
+        smoothed_plus_dm = smoothed_plus_dm - (smoothed_plus_dm / period) + plus_dm[index]
+        smoothed_minus_dm = smoothed_minus_dm - (smoothed_minus_dm / period) + minus_dm[index]
+        dx[index] = _dx(smoothed_tr, smoothed_plus_dm, smoothed_minus_dm)
+
+    first_adx_index = (2 * period) - 1
+    if first_adx_index >= count:
+        return adx
+    first_dx_values = [value for value in dx[period : first_adx_index + 1] if value is not None]
+    if len(first_dx_values) != period:
+        return adx
+    previous_adx = sum(first_dx_values) / period
+    adx[first_adx_index] = previous_adx
+    for index in range(first_adx_index + 1, count):
+        dx_value = dx[index]
+        if dx_value is None:
+            continue
+        previous_adx = ((previous_adx * (period - 1)) + dx_value) / period
+        adx[index] = previous_adx
+    return adx
+
+
+def _params_from_cartridge(cartridge: Mapping[str, Any]) -> IchimokuParams:
+    values = _mapping(cartridge, "ichimoku")
+    return IchimokuParams(
+        tenkan=int(values["tenkan"]),
+        kijun=int(values["kijun"]),
+        senkou_b=int(values["senkou_b"]),
+        displacement=int(values["displacement"]),
+    )
+
+
+def _entry_gate_provider(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    cartridge: Mapping[str, Any],
+) -> _EntryGateProvider | None:
+    regime = _mapping(cartridge, "regime")
+    regime_type = str(regime["type"])
+
+    if regime_type == "none":
+        return None
+    elif regime_type == "adx":
+        params = _mapping(regime, "params")
+        period = _positive_int(params.get("period"), "regime.params.period")
+        threshold = _positive_float(params.get("threshold"), "regime.params.threshold")
+        adx_values = compute_wilder_adx(candles, period=period)
+    else:
+        raise NotImplementedError(f"regime.type={regime_type!r} is not wired")
+
+    def gate(index: int) -> Mapping[str, Any]:
+        adx_value = adx_values[index]
+        values = {"adx": _stable_float(adx_value), "period": period, "threshold": threshold}
+        if adx_value is None:
+            return {"allowed": False, "reason": "adx_unavailable", "values": values}
+        if adx_value < float(threshold):
+            return {"allowed": False, "reason": "adx_below_threshold", "values": values}
+        return {"allowed": True, "reason": "adx_threshold_met", "values": values}
+
+    return gate
+
+
+def _normalize_entry_gate(raw_gate: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "allowed": bool(raw_gate.get("allowed", False)),
+        "reason": str(raw_gate.get("reason", "entry_gate_unspecified")),
+        "values": _stable_mapping_values(_mapping_or_empty(raw_gate.get("values"))),
+    }
+
+
+def _attach_cartridge_metadata(
+    report: dict[str, Any],
+    *,
+    cartridge: Mapping[str, Any],
+    runnable: bool,
+) -> None:
+    report["cartridge"] = {
+        "id": cartridge["id"],
+        "title": cartridge["title"],
+        "status": cartridge["status"],
+        "baseline_ref": cartridge["baseline_ref"],
+        "symbol": cartridge["symbol"],
+        "tf": cartridge["tf"],
+        "runnable": runnable,
+        "ichimoku": dict(_mapping(cartridge, "ichimoku")),
+        "entry_rules": dict(_mapping(cartridge, "entry_rules")),
+        "exit_rules": dict(_mapping(cartridge, "exit_rules")),
+        "regime": dict(_mapping(cartridge, "regime")),
+        "kill_criteria": dict(_mapping(cartridge, "kill_criteria")),
+    }
+
+
+def _dx(smoothed_tr: float, smoothed_plus_dm: float, smoothed_minus_dm: float) -> float:
+    if smoothed_tr <= 0:
+        return 0.0
+    plus_di = 100 * (smoothed_plus_dm / smoothed_tr)
+    minus_di = 100 * (smoothed_minus_dm / smoothed_tr)
+    denominator = plus_di + minus_di
+    if denominator <= 0:
+        return 0.0
+    return 100 * (abs(plus_di - minus_di) / denominator)
+
+
+def _mapping(values: Mapping[str, Any], field: str) -> Mapping[str, Any]:
+    value = values[field]
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field} must be a mapping")
+    return value
+
+
+def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("entry gate values must be a mapping")
+    return value
+
+
+def _positive_int(value: Any, field_name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
+
+
+def _positive_float(value: Any, field_name: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive number")
+    return float(value)
+
+
+def _stable_mapping_values(values: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        key: _stable_float(value) if isinstance(value, float) else value
+        for key, value in values.items()
+    }
 
 
 def _window_candles(

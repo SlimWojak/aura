@@ -10,7 +10,13 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from runtime.brain.types import IchimokuParams
-from runtime.eval import run_backtest, run_backtest_reference, signal_for_closed_bar
+from runtime.eval import (
+    compute_wilder_adx,
+    run_backtest,
+    run_backtest_cartridge,
+    run_backtest_reference,
+    signal_for_closed_bar,
+)
 from runtime.eval import backtest_ichimoku
 from runtime.market.ohlcv import SOURCE, ohlcv_path, write_candles
 from runtime.tools.eval_run import main as eval_main
@@ -82,6 +88,45 @@ class EvalHarnessTests(TestCase):
         self.assertEqual(1, wrapped_compute.call_count)
         self.assertEqual(6_000 - FAST_PARAMS.minimum_candles + 1, report["evaluated_bars"])
 
+    def test_wilder_adx_known_trend_and_flat_values(self):
+        trend = [candle(index, 100 + index) for index in range(12)]
+        flat = [candle(index, 100) for index in range(12)]
+
+        trend_adx = compute_wilder_adx(trend, period=3)
+        flat_adx = compute_wilder_adx(flat, period=3)
+
+        self.assertIsNone(trend_adx[4])
+        self.assertAlmostEqual(100.0, trend_adx[5])
+        self.assertAlmostEqual(100.0, trend_adx[-1])
+        self.assertAlmostEqual(0.0, flat_adx[5])
+        self.assertAlmostEqual(0.0, flat_adx[-1])
+
+    def test_adx_cartridge_gate_reduces_or_matches_trade_count(self):
+        closes = [
+            100 + ((index % 16) - 8) + (index * 0.03)
+            for index in range(96)
+        ]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+        baseline = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        gated = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(
+                regime={"type": "adx", "params": {"period": 3, "threshold": 101}}
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(baseline["metrics"]["trade_count"], 0)
+        self.assertLessEqual(gated["metrics"]["trade_count"], baseline["metrics"]["trade_count"])
+        self.assertEqual("precomputed_ichimoku_cartridge_v1", gated["engine"])
+        self.assertIn("entry_gate", gated["signals"][0])
+
     def test_signal_for_closed_bar_ignores_future_candle_mutation(self):
         candles = [candle(index, 100 + index) for index in range(12)]
         baseline = signal_for_closed_bar(candles, index=7, params=FAST_PARAMS).to_dict()
@@ -148,6 +193,55 @@ class EvalHarnessTests(TestCase):
         self.assertIn("trades", saved)
         self.assertIn("signals", saved)
 
+    def test_cartridge_cli_metrics_only_runs_seed_baseline(self):
+        candles = [candle(index, 100 + index) for index in range(90)]
+        write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
+
+        output = run_cli(
+            [
+                "cartridge",
+                "--aura-root",
+                str(self.aura_root),
+                "--id",
+                "ichi_v0_baseline",
+                "--symbol",
+                "PF_XBTUSD",
+                "--tf",
+                "1h",
+                "--metrics-only",
+            ]
+        )
+
+        self.assertTrue(output["ok"])
+        self.assertEqual("ichi_v0_baseline", output["cartridge"]["id"])
+        self.assertNotIn("trades", output)
+        self.assertTrue(Path(output["outputs"]["report_json"]).exists())
+
+    def test_cartridge_cli_lists_runnable_ids_for_unwired_tk_cloud_seed(self):
+        candles = [candle(index, 100 + index) for index in range(90)]
+        write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
+
+        code, output = run_cli_result(
+            [
+                "cartridge",
+                "--aura-root",
+                str(self.aura_root),
+                "--id",
+                "ichi_tk_cloud_v0",
+                "--symbol",
+                "PF_XBTUSD",
+                "--tf",
+                "1h",
+                "--metrics-only",
+            ]
+        )
+
+        self.assertEqual(1, code)
+        self.assertFalse(output["ok"])
+        self.assertIn("not runnable", output["error"])
+        self.assertIn("ichi_adx_regime_v0", output["runnable_cartridges"])
+        self.assertNotIn("ichi_tk_cloud_v0", output["runnable_cartridges"])
+
     def test_ledger_summarizes_temp_evidence_dir(self):
         trial_root = self.aura_root / "evidence" / "trials" / "T-ledger"
         trial_root.mkdir(parents=True)
@@ -198,13 +292,59 @@ def candle(index: int, close: int | float) -> dict[str, str | int]:
     }
 
 
+def fast_cartridge(*, regime: dict) -> dict:
+    return {
+        "id": "test_fast_cartridge",
+        "title": "Test fast cartridge",
+        "status": "queued",
+        "thesis": "Test cartridge",
+        "symbol": "PF_XBTUSD",
+        "tf": "1h",
+        "baseline_ref": "ichimoku_v0",
+        "ichimoku": {
+            "tenkan": FAST_PARAMS.tenkan,
+            "kijun": FAST_PARAMS.kijun,
+            "senkou_b": FAST_PARAMS.senkou_b,
+            "displacement": FAST_PARAMS.displacement,
+        },
+        "entry_rules": {
+            "mode": "always_on",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "tenkan_over_kijun_for_long_under_for_short",
+            "require_chikou_confirmation": True,
+            "chikou_mode": "close",
+        },
+        "exit_rules": {
+            "mode": "bias_flip",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        },
+        "regime": regime,
+        "kill_criteria": {
+            "max_dd_points": 100,
+            "min_trades": 1,
+            "must_beat_baseline": False,
+            "baseline_metric": "total_pnl_points",
+            "notes": "Test only.",
+        },
+        "sources": ["tests/test_eval_harness.py"],
+    }
+
+
 def run_cli(argv):
+    code, output = run_cli_result(argv)
+    if code != 0:
+        raise AssertionError(f"eval_run exited {code}: {json.dumps(output, sort_keys=True)}")
+    return output
+
+
+def run_cli_result(argv):
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         code = eval_main(argv)
-    if code != 0:
-        raise AssertionError(f"eval_run exited {code}: {stdout.getvalue()}")
-    return json.loads(stdout.getvalue())
+    return code, json.loads(stdout.getvalue())
 
 
 if __name__ == "__main__":
