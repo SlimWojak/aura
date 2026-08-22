@@ -25,8 +25,10 @@ until a separate human live gate.
     `hard`, cancels all futures paper orders, and flattens futures paper
     positions without going through `admit()`.
 - `runtime.market`
-  - Thin OHLCV file spine sourced only from public Kraken Futures Charts HTTPS
-    GETs. It stores normalized candles as JSONL for later Ichimoku v0 work.
+  - Thin market data file spine sourced from Kraken first: OHLCV comes from
+    public Kraken Futures Charts HTTPS GETs, and funding comes from the public
+    historical funding-rate CLI command. It stores normalized JSONL for later
+    eval work.
 - `runtime.brain`
   - Deterministic signal-only brains. Ichimoku v0 computes standard 9/26/52
     components from stored OHLCV and emits a discrete `long`/`short`/`flat`
@@ -39,8 +41,8 @@ until a separate human live gate.
   - Human-triggered soft/hard/arm/heartbeat/dead-man/drill CLI. No systemd unit
     and no strategy logic.
 - `runtime.tools.market_ingest`
-  - Human-triggered CLI to pull/status/show futures OHLCV files. No strategy,
-    no subprocess Kraken command, and no live trading path.
+  - Human-triggered CLI to pull/backfill/status/show futures OHLCV files and
+    public historical funding rates. No strategy and no live trading path.
 - `runtime.tools.ichimoku_signal`
   - Human-triggered CLI to compute Ichimoku v0 and append
     `aura.brain_signal.v1` JSONL evidence. The default path never places paper
@@ -180,11 +182,16 @@ ${AURA_ROOT:-/var/aura}/evidence/trials/T-kill-.../decision.jsonl
 Drills can mix `aura.kill_event.v1` ops records and `aura.decision_event.v1`
 supervised admission records in the same trial JSONL.
 
-## Market OHLCV spine
+## Market data spine
 
 The market spine is deterministic file ingest for later brains. It has no
-Ichimoku logic, no strategy, no daemon, and no order path. Candles come from the
-public Kraken Futures Charts REST endpoint:
+Ichimoku logic, no strategy, no daemon, and no order path. External Binance
+Vision, Kaggle, Glassnode, Nansen, and onchain sources are deliberately deferred;
+Aura stays venue-aligned on Kraken first.
+
+### OHLCV
+
+Candles come from the public Kraken Futures Charts REST endpoint:
 
 ```text
 GET https://futures.kraken.com/api/charts/v1/trade/{symbol}/{tf}
@@ -236,6 +243,64 @@ metadata. Repeated pulls are safe:
 python3.12 -m runtime.tools.market_ingest pull --symbol PF_XBTUSD --tf 1h
 python3.12 -m runtime.tools.market_ingest status
 python3.12 -m runtime.tools.market_ingest show --symbol PF_XBTUSD --tf 1h --tail 3
+```
+
+The default `pull` command is an incremental refresh from the last stored candle
+and remains the fast path. Multi-year history is added with backward `to=`
+pagination:
+
+```bash
+python3.12 -m runtime.tools.market_ingest backfill --symbol PF_XBTUSD --tf 1h --pages 40
+python3.12 -m runtime.tools.market_ingest backfill --symbol PF_ETHUSD --tf 1h --pages 40
+python3.12 -m runtime.tools.market_ingest backfill --symbol PF_XBTUSD --tf 1h --since 2023-05-01T00:00:00Z
+```
+
+Backfill starts from the stored earliest candle when present, otherwise from the
+newest page, and stops when the requested page count, `--since`, an empty or
+duplicate page, or the safety max is reached. Metadata tracks
+`earliest_ts_ms`, `latest_ts_ms`, `candle_count`, and cumulative
+`backfill_pages`.
+
+### Funding rates
+
+Funding rates come from the public Kraken Futures historical funding-rate
+command:
+
+```text
+kraken futures historical-funding-rates SYMBOL -o json
+```
+
+This is market data, not the live funding scope. The ingest never passes
+`--allow-dangerous` and does not call paper or live order paths.
+
+Files are written under:
+
+```text
+${AURA_ROOT:-/var/aura}/market/funding/{SYMBOL}.jsonl
+${AURA_ROOT:-/var/aura}/market/meta/{SYMBOL}.json
+```
+
+Each funding line uses schema `aura.funding_rate.v1`:
+
+```json
+{
+  "schema": "aura.funding_rate.v1",
+  "symbol": "PF_XBTUSD",
+  "ts": "2026-08-22T00:00:00Z",
+  "funding_rate": "0.0001",
+  "relative_funding_rate": "0.0001",
+  "source": "kraken_futures_historical_funding_rates",
+  "ingested_at": "2026-08-22T00:00:00Z"
+}
+```
+
+Funding pulls upsert by `(symbol, ts)`, rewrite sorted JSONL, and update the
+`funding` section in symbol metadata:
+
+```bash
+python3.12 -m runtime.tools.market_ingest funding-pull --symbol PF_XBTUSD
+python3.12 -m runtime.tools.market_ingest status
+python3.12 -m runtime.tools.market_ingest show --kind funding --symbol PF_XBTUSD --tail 3
 ```
 
 ## Ichimoku v0 brain

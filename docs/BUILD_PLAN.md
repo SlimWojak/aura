@@ -24,6 +24,9 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 - [x] Agent workplace scaffold (AGENTS.md, DISPATCH.md, Cursor fence rule, runtime stubs)
 - [x] Aura operating charter: autonomy, brain lean, paper fence, promotion gate
 - [x] Kill-drill CLI wiring and one-shot drill smoke; repeat before unsupervised paper
+- [x] Kraken-first market data enrichment: multi-page Futures Charts OHLCV
+  backfill plus public historical funding-rate JSONL. External Binance/onchain
+  sources remain deferred.
 
 ## Delegates on dexter (target)
 
@@ -57,6 +60,9 @@ Exit: CoS can request a tiny supervised paper action end-to-end with traces; col
 ### P2 — OHLCV spine + Ichimoku v0 (after P1 honest)
 1. [x] Market OHLCV spine for Kraken futures-paper majors via public Kraken
    Futures Charts REST; no live scopes, no strategy, no Ichimoku yet.
+   Multi-year backfill now pages older candles with `to=` and adds a matching
+   Kraken historical funding-rate file spine; Binance Vision, Kaggle, Glassnode,
+   Nansen, and onchain feeds stay out of scope until a separate CoS decision.
 2. [x] Ichimoku v0 signal brain: standard 9/26/52 + 26 displacement, deterministic
    `long`/`short`/`flat` output, JSONL evidence, optional dry supervised proposal;
    **not** ICT/ATOM and not live trading.
