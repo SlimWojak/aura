@@ -195,3 +195,45 @@ not exceed parent by more than 10% on either split; `min_trades >= 12`.
 | 2026-08-22 | `ichi_v0_trend_kijun_trail_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | 9d53c79 | dexter paper | XBT OOS ATR total 17.38 < parent 27.45. ETH OOS ATR total -9.10 < parent -2.95; ETH OOS DD 1.17x parent. IS Calmar/maxDD improved both symbols. | false | killed | Forever-killed. OOS return loses despite IS Calmar/maxDD improvement, and ETH OOS DD breaches the parent +10% limit. |
 | 2026-08-22 | `ichi_v0_trend_chandelier_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | 9d53c79 | dexter paper | OOS ATR deeply negative on both symbols; DD breaches. | false | killed | Forever-killed. OOS ATR and DD both fail the Track C gate. |
 | 2026-08-22 | `ichi_v0_trend_atr_stop_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | 9d53c79 | dexter paper | XBT OOS ATR total 36.61 > parent 27.45, but trades 4 < 12 and DD catastrophic. ETH fails. | false | killed | Forever-killed. A single XBT OOS ATR beat cannot pass with too few trades, catastrophic DD, and ETH failure. |
+
+## 2026-08-22 Phase-2 regime ablation bake-off
+
+CoS Phase-2 ablation bank for exact dexter paper rows at HEAD `23ea168`, host
+dexter, `AURA_ROOT=/var/aura`. Rows used
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only`.
+Evidence path:
+`/var/aura/evidence/evals/phase2-ablation-20260822/`.
+
+This section banks evidence and dispositions only: no production
+`RegimeParams` default changes, no live scopes, no constellation/RIVER, no
+runtime state, no lower-TF changes, and no status mutation for
+`ichi_params_20_60_trend_v0`. The twelve ablation cartridges remain draft
+research cartridges in repo; finished-ablation dispositions are recorded here
+instead of forever-killing the ablation ids.
+
+### Phase-2 ablation OOS rows
+
+| Date | Ablation | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | AB-0 | `ichi_p2_ab0_xbt_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 74.54; Sharpe 1.42; DSR 0.406; Calmar 2.116; maxDD -35.62; trades 261; pnl_fee +18762 | n/a ablation ref | reference | No-Phase-2-veto baseline. Beats AB-FULL OOS Calmar and DSR on XBT; not promoted to production by this bank. |
+| 2026-08-22 | AB-0 | `ichi_p2_ab0_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 27.09; Sharpe 0.51; DSR 0.124; Calmar 0.499; maxDD -54.92; trades 279; pnl_fee +78 | n/a ablation ref | reference | No-Phase-2-veto baseline. Beats AB-FULL OOS Calmar and DSR on ETH; full gate may be net harmful as a package. |
+| 2026-08-22 | AB-FULL | `ichi_p2_abfull_xbt_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 27.45; Sharpe 1.11; DSR 0.289; Calmar 1.878; maxDD -14.77; trades 44; pnl_fee +13287 | n/a ablation ref | reference | Full production-spine gate reference: ADX/DI, kumo width/ATR, 1d HTF veto, and dwell/hysteresis all enabled. |
+| 2026-08-22 | AB-FULL | `ichi_p2_abfull_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total -2.95; Sharpe -0.12; DSR 0.037; Calmar -0.105; maxDD -28.34; trades 45; pnl_fee -108 | n/a ablation ref | reference | Full production-spine gate reference. ETH OOS is negative, so this row does not support auto-promotion. |
+| 2026-08-22 | AB-noADX | `ichi_p2_abnoadx_xbt_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 51.80; Sharpe 1.63; DSR 0.501; Calmar 2.490; maxDD -21.03; trades 66; pnl_fee +20273 | n/a ablation | DROP_CANDIDATE | Removing ADX/DI improves OOS Calmar and DSR versus AB-FULL on XBT. |
+| 2026-08-22 | AB-noADX | `ichi_p2_abnoadx_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 31.92; Sharpe 1.00; DSR 0.255; Calmar 1.028; maxDD -31.41; trades 62; pnl_fee +526 | n/a ablation | DROP_CANDIDATE | Removing ADX/DI improves OOS Calmar and DSR versus AB-FULL on ETH. |
+| 2026-08-22 | AB-noWidth | `ichi_p2_abnowidth_xbt_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 31.83; Sharpe 1.15; DSR 0.302; Calmar 1.817; maxDD -17.71; trades 48; pnl_fee +10842 | n/a ablation | INCONCLUSIVE | Removing kumo width/ATR modestly improves DSR but slightly worsens Calmar versus AB-FULL on XBT. |
+| 2026-08-22 | AB-noWidth | `ichi_p2_abnowidth_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 9.01; Sharpe 0.32; DSR 0.089; Calmar 0.292; maxDD -31.25; trades 50; pnl_fee +19 | n/a ablation | INCONCLUSIVE | Removing kumo width/ATR improves ETH versus AB-FULL, but XBT evidence is mixed. |
+| 2026-08-22 | AB-noHTF | `ichi_p2_abnohtf_xbt_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 8.05; Sharpe 0.30; DSR 0.086; Calmar 0.341; maxDD -23.90; trades 54; pnl_fee +5342 | n/a ablation | KEEP_IN_SPINE | Removing the 1d HTF veto worsens Calmar and DSR versus AB-FULL on XBT. |
+| 2026-08-22 | AB-noHTF | `ichi_p2_abnohtf_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total -12.89; Sharpe -0.48; DSR 0.016; Calmar -0.400; maxDD -32.58; trades 54; pnl_fee -327 | n/a ablation | KEEP_IN_SPINE | Removing the 1d HTF veto worsens Calmar and DSR versus AB-FULL on ETH. |
+| 2026-08-22 | AB-noDwell | `ichi_p2_abnodwell_xbt_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 56.08; Sharpe 1.84; DSR 0.591; Calmar 1.995; maxDD -28.42; trades 50; pnl_fee +19130 | n/a ablation | DROP_CANDIDATE | Removing dwell/hysteresis improves OOS Calmar and DSR versus AB-FULL on XBT. |
+| 2026-08-22 | AB-noDwell | `ichi_p2_abnodwell_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 12 --metrics-only` | 23ea168 | dexter paper | OOS: ATR total 22.34; Sharpe 0.73; DSR 0.176; Calmar 0.711; maxDD -31.76; trades 54; pnl_fee +726 | n/a ablation | DROP_CANDIDATE | Removing dwell/hysteresis improves OOS Calmar and DSR versus AB-FULL on ETH. |
+
+### Phase-2 component verdicts
+
+| Component | Ablation comparison | CoS verdict | Evidence summary | Repo action |
+|---|---|---|---|---|
+| 1d higher-timeframe veto | AB-noHTF vs AB-FULL | KEEP_IN_SPINE | Removal worsens OOS Calmar on both symbols: XBT 0.341 vs 1.878, ETH -0.400 vs -0.105; DSR also worsens both. | Keep documented as spine evidence; no production default mutation in this PR. |
+| ADX/DI | AB-noADX vs AB-FULL | DROP_CANDIDATE | Removal improves OOS Calmar and DSR on both symbols: XBT Calmar 2.490 vs 1.878, ETH 1.028 vs -0.105. | Bank as thinning candidate for a separate human/CoS decision. |
+| Dwell/hysteresis | AB-noDwell vs AB-FULL | DROP_CANDIDATE | Removal improves OOS Calmar and DSR on both symbols: XBT DSR 0.591 vs 0.289, ETH 0.176 vs 0.037. | Bank as thinning candidate for a separate human/CoS decision. |
+| Kumo width/ATR | AB-noWidth vs AB-FULL | INCONCLUSIVE | ETH improves, while XBT DSR improves slightly and Calmar slips from 1.878 to 1.817. | Leave for further evidence; no default mutation. |
+| Full Phase-2 gate package | AB-0 vs AB-FULL | reference | AB-0 beats AB-FULL OOS Calmar and DSR on both symbols, suggesting the full gate may be net harmful as a package. | Do not promote ungated behavior to production in this PR; bank evidence only. |
