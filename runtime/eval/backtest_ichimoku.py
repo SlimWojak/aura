@@ -134,6 +134,8 @@ def run_backtest_cartridge(
 
     entry_rules = _mapping(cartridge, "entry_rules")
     chikou_mode = str(entry_rules["chikou_mode"])
+    allowed_sides = set(entry_rules["allowed_sides"])
+    allowed_entry_sides = None if allowed_sides == {"long", "short"} else allowed_sides
     series = compute_ichimoku(normalized, params=params)
     entry_gate_provider = _entry_gate_provider(normalized, cartridge=cartridge)
     report = _score_backtest(
@@ -157,7 +159,7 @@ def run_backtest_cartridge(
             chikou_mode=chikou_mode,  # type: ignore[arg-type]
         ),
         entry_gate_provider=entry_gate_provider,
-        allowed_entry_sides=set(entry_rules["allowed_sides"]),
+        allowed_entry_sides=allowed_entry_sides,
     )
     _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
     return report
