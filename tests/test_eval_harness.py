@@ -433,7 +433,7 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(long_signals)
 
     def test_kumo_break_cartridge_detects_close_through_cloud(self):
-        closes = [140, 140, 140, 90, 110, 121, 122, 123]
+        closes = [140, 140, 140, 140, 90, 110, 121, 122]
         report = run_backtest_cartridge(
             [candle(index, close) for index, close in enumerate(closes)],
             cartridge=kumo_break_cartridge(),
