@@ -363,3 +363,41 @@ so the PBO scar is explicit and closed for this harness path.
 Implications locked: prior cartridge kills remain informative; Intern R8 still
 frozen; next is width ON/OFF A/B (Grok path) because the harness can hear. This
 PR makes no live change and records no status flips.
+
+## 2026-08-22 width ON/OFF A/B INCONCLUSIVE
+
+Paper-only CoS width ON/OFF A/B bank at eval HEAD `ae6d5b0`; main may be
+`6390ba8+`. Evidence path:
+`/var/aura/evidence/evals/width-ab-20260822/` (`SUMMARY.md`,
+`comparison.json`).
+
+This section banks evidence only: no YAML status changes, no `RegimeParams`
+default changes, no live scopes, no constellation/RIVER, no runtime state, and
+no Intern R8 unlock. The spine defaults are unchanged.
+
+WIDTH ON is the thin production default spine: HTF+width ON, ADX/dwell OFF, via
+normal `--id`. WIDTH OFF is evidence-only `--path` override behavior with
+`regime.params.phase2_ablation` setting `kumo_width_atr=false`.
+
+Locked set: `ichi_v0_baseline`, `ichi_params_20_60_trend_v0`
+(`scarred_control`), `ichi_always_on_tsmom_thin_v0` (`scarred_control`), and
+`ichi_cloud_bias_tsmom_thin_v0` (`champion_control`) across WIDTH ON/OFF and
+`PF_XBTUSD` + `PF_ETHUSD` = 16 runs.
+
+Flags:
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only`.
+
+| Measure | PF_XBTUSD | PF_ETHUSD | CoS read |
+|---|---|---|---|
+| Flip-rate | 0.1626 -> 0.1596 (-1.84% rel) | 0.1463 -> 0.1435 (-1.95% rel) | Noise. |
+| `TREND_*` occupancy | 24.55% -> 30.72% (+6.17pp) | 23.97% -> 29.22% (+5.25pp) | Width is not a label no-op. |
+| Champion `ichi_cloud_bias_tsmom_thin_v0` OOS ATR | 60.65 -> 74.39 (+13.74) | 97.61 -> 96.09 (-1.52) | Mixed sign. |
+| Champion `ichi_cloud_bias_tsmom_thin_v0` DSR | 0.343 -> 0.436 | 0.729 -> 0.655 | Mixed sign. |
+
+CoS disposition: **INCONCLUSIVE** -- neither DROP nor KEEP_IN_SPINE under the
+Grok falsifier, because the ATR move is mixed-sign and flip-rate did not move
+beyond noise.
+
+Locked implication: production thin spine leaves width ON; no further N is
+spent on width. Intern R8 remains frozen. The next planned unscarred shot is 4h
+signal/regime-TF entry, not in this PR.
