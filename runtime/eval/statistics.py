@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from itertools import combinations
 from math import erf, exp, isfinite, log, sqrt
 from pathlib import Path
@@ -15,6 +16,7 @@ TRIAL_MATRIX_SCHEMA = "aura.trial_matrix_stats.v1"
 DEFAULT_ATR_PERIOD = 14
 DEFAULT_CSCV_GROUPS = 8
 EULER_GAMMA = 0.5772156649015329
+HOUR_MS = 3_600_000
 
 
 def compute_wilder_atr(
@@ -61,6 +63,8 @@ def build_return_report(
     start_index: int,
     tf: str,
     fee_bps: float = 0.0,
+    funding_rates: Sequence[Mapping[str, Any]] | None = None,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
 ) -> dict[str, Any]:
@@ -72,8 +76,17 @@ def build_return_report(
         raise ValueError("atr_period must be positive")
     if trial_count <= 0:
         raise ValueError("trial_count must be positive")
+    if funding_rates is not None and funding_bps is not None:
+        raise ValueError("funding_rates and funding_bps are mutually exclusive")
 
     atr_values = compute_wilder_atr(candles, period=atr_period)
+    funding_enabled = funding_rates is not None or funding_bps is not None
+    funding_by_ts_ms = _funding_rates_by_ts_ms(funding_rates) if funding_rates is not None else None
+    constant_hourly_funding = (
+        _finite_float(funding_bps, "funding_bps") / 10_000.0
+        if funding_bps is not None
+        else None
+    )
     rows = [
         {
             "index": index,
@@ -92,11 +105,20 @@ def build_return_report(
         }
         for index in range(start_index, len(candles))
     ]
+    if funding_enabled:
+        for row in rows:
+            row["funding_points"] = 0.0
+            row["funding_simple_return"] = 0.0
+            row["funding_atr_normalized_return"] = 0.0
     rows_by_index = {int(row["index"]): row for row in rows}
 
     total_fee_points = 0.0
     fee_simple_return = 0.0
     fee_atr_return = 0.0
+    total_funding_points = 0.0
+    funding_simple_return = 0.0
+    funding_atr_return = 0.0
+    funding_missing_held_bars = 0
     holding_bars: list[int] = []
     position_changes = 0
     previous_direction = 0
@@ -137,6 +159,31 @@ def build_return_report(
             row["atr_normalized_return"] = _stable_float(
                 float(row["atr_normalized_return"]) + atr_return
             )
+            if funding_enabled:
+                funding_relative, missing_funding = _funding_relative_for_bar(
+                    candles[index],
+                    tf=tf,
+                    funding_by_ts_ms=funding_by_ts_ms,
+                    constant_hourly_funding=constant_hourly_funding,
+                )
+                if missing_funding:
+                    funding_missing_held_bars += 1
+                    continue
+                funding_simple = -direction * funding_relative
+                funding_points = funding_simple * previous_price
+                funding_atr = funding_points / atr_risk if atr_risk is not None else 0.0
+                total_funding_points += funding_points
+                funding_simple_return += funding_simple
+                funding_atr_return += funding_atr
+                row["funding_points"] = _stable_float(
+                    float(row["funding_points"]) + funding_points
+                )
+                row["funding_simple_return"] = _stable_float(
+                    float(row["funding_simple_return"]) + funding_simple
+                )
+                row["funding_atr_normalized_return"] = _stable_float(
+                    float(row["funding_atr_normalized_return"]) + funding_atr
+                )
 
         exit_row = rows_by_index.get(exit_index)
         if exit_row is not None and fee_points > 0:
@@ -154,12 +201,22 @@ def build_return_report(
                 float(exit_row["fee_atr_normalized_return"]) + trade_fee_atr
             )
 
+    if funding_missing_held_bars > 0:
+        raise ValueError(
+            "funding_missing_held_bars="
+            f"{funding_missing_held_bars}; stored funding rates must cover every held bar"
+        )
+
     for row in rows:
+        funding_simple = float(row["funding_simple_return"]) if funding_enabled else 0.0
+        funding_atr = float(row["funding_atr_normalized_return"]) if funding_enabled else 0.0
         row["net_simple_return"] = _stable_float(
-            float(row["simple_return"]) - float(row["fee_simple_return"])
+            float(row["simple_return"]) - float(row["fee_simple_return"]) + funding_simple
         )
         row["net_atr_normalized_return"] = _stable_float(
-            float(row["atr_normalized_return"]) - float(row["fee_atr_normalized_return"])
+            float(row["atr_normalized_return"])
+            - float(row["fee_atr_normalized_return"])
+            + funding_atr
         )
 
     periods_per_year = periods_per_year_for_tf(tf)
@@ -172,46 +229,58 @@ def build_return_report(
     turnover = position_changes / evaluated_bars if evaluated_bars else 0.0
     average_holding_period = sum(holding_bars) / trade_count if trade_count else 0.0
 
+    summary = {
+        "simple": summarize_returns(
+            simple_returns,
+            periods_per_year=periods_per_year,
+            trial_count=trial_count,
+            compound=True,
+        ),
+        "atr_normalized": summarize_returns(
+            atr_returns,
+            periods_per_year=periods_per_year,
+            trial_count=trial_count,
+            compound=False,
+        ),
+        "gross_simple": summarize_returns(
+            gross_simple_returns,
+            periods_per_year=periods_per_year,
+            trial_count=trial_count,
+            compound=True,
+        ),
+        "gross_atr_normalized": summarize_returns(
+            gross_atr_returns,
+            periods_per_year=periods_per_year,
+            trial_count=trial_count,
+            compound=False,
+        ),
+        "trade_count": trade_count,
+        "average_holding_bars": _stable_float(average_holding_period),
+        "turnover": _stable_float(turnover),
+        "fee_bps": _stable_float(fee_bps),
+        "fee_drag_points": _stable_float(total_fee_points),
+        "fee_drag_simple_return": _stable_float(fee_simple_return),
+        "fee_drag_atr_normalized_return": _stable_float(fee_atr_return),
+        "return_count": len(rows),
+    }
+    if funding_enabled:
+        summary["funding_source"] = (
+            "constant_hourly_bps" if constant_hourly_funding is not None else "stored_relative_funding_rate"
+        )
+        if funding_bps is not None:
+            summary["funding_bps"] = _stable_float(_finite_float(funding_bps, "funding_bps"))
+        summary["funding_missing_held_bars"] = funding_missing_held_bars
+        summary["funding_drag_points"] = _stable_float(-total_funding_points)
+        summary["funding_drag_simple_return"] = _stable_float(-funding_simple_return)
+        summary["funding_drag_atr_normalized_return"] = _stable_float(-funding_atr_return)
+
     return {
         "schema": RETURN_STATS_SCHEMA,
         "atr_period": atr_period,
         "periods_per_year": _stable_float(periods_per_year),
         "trial_count": trial_count,
         "series": rows,
-        "summary": {
-            "simple": summarize_returns(
-                simple_returns,
-                periods_per_year=periods_per_year,
-                trial_count=trial_count,
-                compound=True,
-            ),
-            "atr_normalized": summarize_returns(
-                atr_returns,
-                periods_per_year=periods_per_year,
-                trial_count=trial_count,
-                compound=False,
-            ),
-            "gross_simple": summarize_returns(
-                gross_simple_returns,
-                periods_per_year=periods_per_year,
-                trial_count=trial_count,
-                compound=True,
-            ),
-            "gross_atr_normalized": summarize_returns(
-                gross_atr_returns,
-                periods_per_year=periods_per_year,
-                trial_count=trial_count,
-                compound=False,
-            ),
-            "trade_count": trade_count,
-            "average_holding_bars": _stable_float(average_holding_period),
-            "turnover": _stable_float(turnover),
-            "fee_bps": _stable_float(fee_bps),
-            "fee_drag_points": _stable_float(total_fee_points),
-            "fee_drag_simple_return": _stable_float(fee_simple_return),
-            "fee_drag_atr_normalized_return": _stable_float(fee_atr_return),
-            "return_count": len(rows),
-        },
+        "summary": summary,
     }
 
 
@@ -509,6 +578,88 @@ def extract_trial_returns(
         "returns": returns,
         "periods_per_year": return_report.get("periods_per_year", periods_per_year_for_tf(str(report.get("tf", "1h")))),
     }
+
+
+def _funding_rates_by_ts_ms(rates: Sequence[Mapping[str, Any]]) -> dict[int, float]:
+    funding_by_ts_ms: dict[int, float] = {}
+    for index, rate in enumerate(rates):
+        ts_ms = _funding_ts_ms(rate.get("ts"))
+        funding_by_ts_ms[ts_ms] = _finite_float(
+            rate.get("relative_funding_rate"),
+            f"funding_rates[{index}].relative_funding_rate",
+        )
+    return funding_by_ts_ms
+
+
+def _funding_relative_for_bar(
+    candle: Mapping[str, Any],
+    *,
+    tf: str,
+    funding_by_ts_ms: Mapping[int, float] | None,
+    constant_hourly_funding: float | None,
+) -> tuple[float, bool]:
+    duration_ms = timeframe_duration_ms(tf)
+    if duration_ms < HOUR_MS:
+        raise ValueError("--apply-funding requires 1h or coarser candles")
+    if duration_ms % HOUR_MS != 0:
+        raise ValueError("--apply-funding requires whole-hour candle durations")
+    hour_count = duration_ms // HOUR_MS
+    if constant_hourly_funding is not None:
+        return constant_hourly_funding * hour_count, False
+
+    if funding_by_ts_ms is None:
+        return 0.0, False
+    open_ts_ms = _candle_ts_ms(candle)
+    labels = range(open_ts_ms, open_ts_ms + duration_ms, HOUR_MS)
+    missing = any(label not in funding_by_ts_ms for label in labels)
+    if missing:
+        return 0.0, True
+    return sum(funding_by_ts_ms[label] for label in labels), False
+
+
+def _funding_ts_ms(raw_value: Any) -> int:
+    if raw_value in (None, ""):
+        raise ValueError("funding rate missing ts")
+    if isinstance(raw_value, (int, float)):
+        value = _finite_float(raw_value, "funding_rate.ts")
+        seconds = value / 1000.0 if abs(value) > 100_000_000_000 else value
+        return int(seconds * 1000)
+    raw_text = str(raw_value).strip()
+    if not raw_text:
+        raise ValueError("funding rate missing ts")
+    try:
+        value = float(raw_text)
+    except ValueError:
+        iso_text = raw_text.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(iso_text)
+        except ValueError as exc:
+            raise ValueError(f"funding rate has invalid ts: {raw_value!r}") from exc
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return int(parsed.astimezone(UTC).timestamp() * 1000)
+    if not isfinite(value):
+        raise ValueError("funding rate has non-finite ts")
+    seconds = value / 1000.0 if abs(value) > 100_000_000_000 else value
+    return int(seconds * 1000)
+
+
+def _candle_ts_ms(candle: Mapping[str, Any]) -> int:
+    try:
+        ts_ms = int(candle.get("ts_ms"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("funding alignment requires candle ts_ms") from exc
+    return ts_ms
+
+
+def timeframe_duration_ms(tf: str) -> int:
+    if tf.endswith("m"):
+        return int(tf[:-1]) * 60_000
+    if tf.endswith("h"):
+        return int(tf[:-1]) * HOUR_MS
+    if tf.endswith("d"):
+        return int(tf[:-1]) * 24 * HOUR_MS
+    raise ValueError(f"unsupported timeframe for funding alignment: {tf!r}")
 
 
 def periods_per_year_for_tf(tf: str) -> float:

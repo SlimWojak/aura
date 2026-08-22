@@ -26,7 +26,7 @@ from typing import Any, Callable, Mapping, Sequence
 from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
 from runtime.eval.statistics import DEFAULT_ATR_PERIOD, build_return_report, compute_wilder_atr
-from runtime.market import ohlcv_path, read_candles, validate_symbol, validate_tf
+from runtime.market import funding_path, ohlcv_path, read_candles, read_funding_rates, validate_symbol, validate_tf
 from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
 from runtime.research.cartridge import load_cartridge, load_cartridges
 
@@ -103,6 +103,8 @@ def run_backtest(
     params: IchimokuParams | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    funding_rates: Sequence[Mapping[str, Any]] | None = None,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
 ) -> dict[str, Any]:
@@ -148,6 +150,8 @@ def run_backtest(
         ),
         signal_provider=lambda index: signal_from_series(series, index=index),
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
     )
@@ -161,6 +165,8 @@ def run_backtest_cartridge(
     tf: str | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    funding_rates: Sequence[Mapping[str, Any]] | None = None,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
     regime_tf: str | None = None,
@@ -275,6 +281,8 @@ def run_backtest_cartridge(
         exit_gate_provider=regime_gate_provider if exit_mode == "regime_exit" else None,
         allowed_entry_sides=allowed_entry_sides,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
     )
@@ -333,6 +341,8 @@ def run_backtest_reference(
     params: IchimokuParams | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    funding_rates: Sequence[Mapping[str, Any]] | None = None,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
 ) -> dict[str, Any]:
@@ -375,6 +385,8 @@ def run_backtest_reference(
             params=resolved_params,
         ),
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
     )
@@ -418,6 +430,8 @@ def _score_backtest(
     exit_gate_provider: _EntryGateProvider | None = None,
     allowed_entry_sides: set[str] | None = None,
     fee_bps: float = 0.0,
+    funding_rates: Sequence[Mapping[str, Any]] | None = None,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
 ) -> dict[str, Any]:
@@ -615,6 +629,8 @@ def _score_backtest(
         start_index=start_index,
         tf=tf,
         fee_bps=resolved_fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
     )
@@ -628,6 +644,15 @@ def _score_backtest(
     metrics["fee_drag_atr_normalized_return"] = return_report["summary"][
         "fee_drag_atr_normalized_return"
     ]
+    if funding_rates is not None or funding_bps is not None:
+        metrics["funding_drag_points"] = return_report["summary"]["funding_drag_points"]
+        metrics["funding_drag_simple_return"] = return_report["summary"][
+            "funding_drag_simple_return"
+        ]
+        metrics["funding_drag_atr_normalized_return"] = return_report["summary"][
+            "funding_drag_atr_normalized_return"
+        ]
+        metrics["funding_missing_held_bars"] = return_report["summary"]["funding_missing_held_bars"]
     report = {
         "schema": BACKTEST_REPORT_SCHEMA,
         "ok": True,
@@ -650,6 +675,8 @@ def _score_backtest(
         "trades": trades,
         "signals": signal_trace,
     }
+    if funding_rates is not None or funding_bps is not None:
+        report["funding_model"] = _funding_model_metadata(funding_bps=funding_bps)
     return report
 
 
@@ -662,6 +689,8 @@ def backtest_from_store(
     max_bars: int | None = None,
     since_ts_ms: int | None = None,
     fee_bps: float = 0.0,
+    apply_funding: bool = False,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
 ) -> dict[str, Any]:
@@ -671,16 +700,26 @@ def backtest_from_store(
     safe_tf = validate_tf(tf)
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
     windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    funding_rates = _load_funding_rates(
+        symbol=safe_symbol,
+        aura_root=aura_root,
+        apply_funding=apply_funding,
+        funding_bps=funding_bps,
+    )
     report = run_backtest(
         windowed_candles,
         symbol=safe_symbol,
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps if apply_funding else None,
         atr_period=atr_period,
         trial_count=trial_count,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
+    if apply_funding and funding_bps is None:
+        report["funding_path"] = str(funding_path(safe_symbol, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
     report["window"] = {
         "since_ts_ms": since_ts_ms,
@@ -703,6 +742,8 @@ def cartridge_backtest_from_store(
     since_ts_ms: int | None = None,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
     fee_bps: float = 0.0,
+    apply_funding: bool = False,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
     regime_tf: str | None = None,
@@ -748,6 +789,12 @@ def cartridge_backtest_from_store(
         if confirm_candles is not None
         else None
     )
+    funding_rates = _load_funding_rates(
+        symbol=safe_symbol,
+        aura_root=aura_root,
+        apply_funding=apply_funding,
+        funding_bps=funding_bps,
+    )
     report = run_backtest_cartridge(
         windowed_candles,
         cartridge=cartridge,
@@ -755,6 +802,8 @@ def cartridge_backtest_from_store(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps if apply_funding else None,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=regime_tf,
@@ -763,6 +812,8 @@ def cartridge_backtest_from_store(
         confirm_candles=windowed_confirm_candles,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
+    if apply_funding and funding_bps is None:
+        report["funding_path"] = str(funding_path(safe_symbol, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
     if regime_source_candles is not None:
         _annotate_regime_source_path(
@@ -796,6 +847,8 @@ def cartridge_oos_backtest_from_store(
     since_ts_ms: int | None = None,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
     fee_bps: float = 0.0,
+    apply_funding: bool = False,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
     regime_tf: str | None = None,
@@ -843,6 +896,12 @@ def cartridge_oos_backtest_from_store(
         if confirm_candles is not None
         else None
     )
+    funding_rates = _load_funding_rates(
+        symbol=safe_symbol,
+        aura_root=aura_root,
+        apply_funding=apply_funding,
+        funding_bps=funding_bps,
+    )
     report = run_cartridge_oos_split(
         windowed_candles,
         cartridge=cartridge,
@@ -850,6 +909,8 @@ def cartridge_oos_backtest_from_store(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps if apply_funding else None,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=regime_tf,
@@ -860,6 +921,8 @@ def cartridge_oos_backtest_from_store(
         confirm_candles=windowed_confirm_candles,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
+    if apply_funding and funding_bps is None:
+        report["funding_path"] = str(funding_path(safe_symbol, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
     if regime_source_candles is not None:
         _annotate_regime_source_path(
@@ -889,6 +952,8 @@ def run_cartridge_oos_split(
     tf: str | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    funding_rates: Sequence[Mapping[str, Any]] | None = None,
+    funding_bps: float | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
     trial_count: int = 1,
     regime_tf: str | None = None,
@@ -933,6 +998,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=regime_tf,
@@ -947,6 +1014,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=regime_tf,
@@ -961,6 +1030,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=regime_tf,
@@ -975,6 +1046,8 @@ def run_cartridge_oos_split(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=regime_tf,
@@ -1059,6 +1132,8 @@ def run_cartridge_oos_split(
         },
     }
     report["return_series"] = _combined_split_return_series(candidate_is, candidate_oos)
+    if funding_rates is not None or funding_bps is not None:
+        report["funding_model"] = _funding_model_metadata(funding_bps=funding_bps)
     if "regime_gate" in candidate_is or "regime_gate" in candidate_oos:
         report["regime_gate"] = candidate_is.get("regime_gate", candidate_oos.get("regime_gate"))
     if not report["ok"]:
@@ -1873,6 +1948,8 @@ def _run_baseline_backtest(
     tf: str,
     min_bars: int | None,
     fee_bps: float,
+    funding_rates: Sequence[Mapping[str, Any]] | None,
+    funding_bps: float | None,
     atr_period: int,
     trial_count: int,
     regime_tf: str | None,
@@ -1888,6 +1965,8 @@ def _run_baseline_backtest(
             tf=tf,
             min_bars=min_bars,
             fee_bps=fee_bps,
+            funding_rates=funding_rates,
+            funding_bps=funding_bps,
             atr_period=atr_period,
             trial_count=trial_count,
         )
@@ -1909,6 +1988,8 @@ def _run_baseline_backtest(
         tf=tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        funding_rates=funding_rates,
+        funding_bps=funding_bps,
         atr_period=atr_period,
         trial_count=trial_count,
         regime_tf=baseline_regime_tf,
@@ -2116,6 +2197,37 @@ def _combined_split_return_series(*reports: Mapping[str, Any]) -> dict[str, Any]
         "series": combined_rows,
         "note": "Candidate IS/OOS return rows combined for downstream matrix scoring.",
     }
+
+
+def _load_funding_rates(
+    *,
+    symbol: str,
+    aura_root: str | Path | None,
+    apply_funding: bool,
+    funding_bps: float | None,
+) -> list[dict[str, Any]] | None:
+    if funding_bps is not None and not apply_funding:
+        raise ValueError("--funding-bps requires --apply-funding")
+    if not apply_funding:
+        return None
+    if funding_bps is not None:
+        _finite_float(funding_bps, field_name="funding_bps")
+        return None
+    return read_funding_rates(symbol, aura_root_override=aura_root)
+
+
+def _funding_model_metadata(*, funding_bps: float | None) -> dict[str, Any]:
+    model = {
+        "enabled": True,
+        "source": "constant_hourly_bps" if funding_bps is not None else "stored_relative_funding_rate",
+        "sign": "positive relative_funding_rate makes longs pay and shorts receive",
+        "row_formula": "signed_funding_return = -position_sign * relative_funding_rate",
+        "alignment": "use funding labels with ts in [bar_open, bar_close); never the next bar label",
+        "gate": "funding adjusts eval net returns only; it is not an entry or regime gate",
+    }
+    if funding_bps is not None:
+        model["funding_bps"] = _stable_float(_finite_float(funding_bps, field_name="funding_bps"))
+    return model
 
 
 def _signal_provider_for_cartridge(

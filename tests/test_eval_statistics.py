@@ -46,6 +46,189 @@ class EvalStatisticsTests(unittest.TestCase):
         self.assertEqual(2.0, report["summary"]["atr_normalized"]["total_return"])
         self.assertEqual("additive", report["summary"]["atr_normalized"]["path_type"])
 
+    def test_return_report_without_funding_preserves_default_rows(self):
+        candles = [
+            stat_candle(0, open_price=100, high=101, low=99, close=100),
+            stat_candle(1, open_price=100, high=101, low=99, close=100),
+        ]
+        trades = [
+            {
+                "direction": "long",
+                "entry_index": 0,
+                "entry_price": 100,
+                "exit_index": 1,
+                "exit_price": 100,
+                "pnl_points": 0,
+            }
+        ]
+
+        report = build_return_report(candles, trades, start_index=0, tf="1h", atr_period=1)
+
+        self.assertNotIn("funding_simple_return", report["series"][0])
+        self.assertNotIn("funding_drag_simple_return", report["summary"])
+        self.assertEqual(0.0, report["series"][0]["net_simple_return"])
+
+    def test_positive_relative_funding_debits_longs_and_credits_shorts(self):
+        candles = [
+            stat_candle(0, open_price=100, high=101, low=99, close=100),
+            stat_candle(1, open_price=100, high=101, low=99, close=100),
+        ]
+        rates = [funding_rate(0, "0.0001"), funding_rate(1, "0.0002")]
+
+        long_report = build_return_report(
+            candles,
+            [
+                {
+                    "direction": "long",
+                    "entry_index": 0,
+                    "entry_price": 100,
+                    "exit_index": 1,
+                    "exit_price": 100,
+                    "pnl_points": 0,
+                }
+            ],
+            start_index=0,
+            tf="1h",
+            funding_rates=rates,
+            atr_period=1,
+        )
+        short_report = build_return_report(
+            candles,
+            [
+                {
+                    "direction": "short",
+                    "entry_index": 0,
+                    "entry_price": 100,
+                    "exit_index": 1,
+                    "exit_price": 100,
+                    "pnl_points": 0,
+                }
+            ],
+            start_index=0,
+            tf="1h",
+            funding_rates=rates,
+            atr_period=1,
+        )
+
+        self.assertAlmostEqual(-0.0003, long_report["summary"]["simple"]["cumulative_return_sum"])
+        self.assertAlmostEqual(0.0003, short_report["summary"]["simple"]["cumulative_return_sum"])
+        self.assertAlmostEqual(0.0003, long_report["summary"]["funding_drag_simple_return"])
+        self.assertAlmostEqual(-0.0003, short_report["summary"]["funding_drag_simple_return"])
+
+    def test_fee_exit_row_only_funding_every_held_hour(self):
+        candles = [
+            stat_candle(0, open_price=100, high=101, low=99, close=100),
+            stat_candle(1, open_price=100, high=101, low=99, close=100),
+            stat_candle(2, open_price=100, high=101, low=99, close=100),
+        ]
+        report = build_return_report(
+            candles,
+            [
+                {
+                    "direction": "long",
+                    "entry_index": 0,
+                    "entry_price": 100,
+                    "exit_index": 2,
+                    "exit_price": 100,
+                    "pnl_points": 0,
+                    "fee_points": 1.0,
+                }
+            ],
+            start_index=0,
+            tf="1h",
+            funding_bps=1.0,
+            atr_period=1,
+        )
+
+        self.assertEqual([0.0, 0.0, 1.0], [row["fee_points"] for row in report["series"]])
+        self.assertEqual(
+            [-0.0001, -0.0001, -0.0001],
+            [row["funding_simple_return"] for row in report["series"]],
+        )
+        self.assertLess(report["series"][2]["net_simple_return"], report["series"][1]["net_simple_return"])
+
+    def test_funding_alignment_does_not_look_ahead_to_next_hour(self):
+        candles = [
+            stat_candle(0, open_price=100, high=101, low=99, close=100),
+            stat_candle(1, open_price=100, high=101, low=99, close=100),
+        ]
+        report = build_return_report(
+            candles,
+            [
+                {
+                    "direction": "long",
+                    "entry_index": 0,
+                    "entry_price": 100,
+                    "exit_index": 0,
+                    "exit_price": 100,
+                    "pnl_points": 0,
+                }
+            ],
+            start_index=0,
+            tf="1h",
+            funding_rates=[funding_rate(0, "0.0001"), funding_rate(1, "0.9000")],
+            atr_period=1,
+        )
+
+        self.assertAlmostEqual(-0.0001, report["series"][0]["net_simple_return"])
+        self.assertAlmostEqual(0.0, report["series"][1]["net_simple_return"])
+
+    def test_four_hour_funding_sums_completed_hourly_labels(self):
+        candles = [
+            stat_candle(0, open_price=100, high=101, low=99, close=100),
+            stat_candle(4, open_price=100, high=101, low=99, close=100),
+        ]
+        report = build_return_report(
+            candles,
+            [
+                {
+                    "direction": "long",
+                    "entry_index": 0,
+                    "entry_price": 100,
+                    "exit_index": 0,
+                    "exit_price": 100,
+                    "pnl_points": 0,
+                }
+            ],
+            start_index=0,
+            tf="4h",
+            funding_rates=[
+                funding_rate(0, "0.0001"),
+                funding_rate(1, "0.0002"),
+                funding_rate(2, "0.0003"),
+                funding_rate(3, "0.0004"),
+                funding_rate(4, "0.9000"),
+            ],
+            atr_period=1,
+        )
+
+        self.assertAlmostEqual(-0.001, report["series"][0]["net_simple_return"])
+
+    def test_missing_funding_on_held_bar_fails_closed(self):
+        candles = [
+            stat_candle(0, open_price=100, high=101, low=99, close=100),
+            stat_candle(1, open_price=100, high=101, low=99, close=100),
+        ]
+
+        with self.assertRaisesRegex(ValueError, "funding_missing_held_bars=1"):
+            build_return_report(
+                candles,
+                [
+                    {
+                        "direction": "long",
+                        "entry_index": 0,
+                        "entry_price": 100,
+                        "exit_index": 1,
+                        "exit_price": 100,
+                        "pnl_points": 0,
+                    }
+                ],
+                start_index=0,
+                tf="1h",
+                funding_rates=[funding_rate(0, "0.0001")],
+                atr_period=1,
+            )
+
     def test_dsr_penalizes_larger_honest_trial_count(self):
         returns = [0.02, -0.005, 0.018, 0.004, 0.015, -0.002, 0.013, 0.006, 0.02, -0.004]
 
@@ -97,6 +280,13 @@ def stat_candle(
         "high": high,
         "low": low,
         "close": close,
+    }
+
+
+def funding_rate(index: int, relative: str) -> dict[str, str]:
+    return {
+        "ts": f"1970-01-01T{index:02d}:00:00Z",
+        "relative_funding_rate": relative,
     }
 
 
