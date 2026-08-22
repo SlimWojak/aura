@@ -1,6 +1,6 @@
 id: ichi_params_20_60_trend_long_only_n8_v0
 title: Ichimoku 20 60 trend long-only n8 retest
-status: draft
+status: killed
 thesis: Re-test the long-only 20/60/120/60 Phase 2 trend idea as a new pre-registered id with min_trades 8 rather than polishing the killed R5 long-only cartridge.
 symbol: PF_XBTUSD
 tf: 1h
@@ -31,7 +31,7 @@ kill_criteria:
   min_trades: 8
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless forced 70/30 BTC IS and OOS beat the fee-on regime-gated baseline, ETH OOS beats its fee-on regime-gated baseline, and BTC OOS max_drawdown_points is at or below 12000. New id only; do not mutate or polish killed ichi_params_20_60_trend_long_only_v0.
+  notes: "New id only; killed by the 2026-08-22 R6 status bank in docs/LEDGER.md, distinct from killed ichi_params_20_60_trend_long_only_v0. PF_XBTUSD OOS pass_oos_gate=false because IS max_dd 13353 exceeded the 12000 point gate despite BTC OOS pnl_fee +5557.89 and OOS max_dd 6839. PF_ETHUSD OOS pass_oos_gate=false because OOS pnl_fee -500.29 was negative and lost to ETH baseline OOS +420.02."
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
@@ -39,4 +39,4 @@ sources:
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "R6 Research Intern long-only n8 draft. Paper-only new id versus killed long_only. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_long_only_n8_v0 --symbol PF_XBTUSD --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7, plus PF_ETHUSD secondary run. Same 20/60/120/60 always_on signal, Chikou close confirmation, bias_flip exits, and allowed_sides [long] as the killed long-only design, but pre-registers min_trades 8."
+notes: "Killed forever by the 2026-08-22 R6 status bank in docs/LEDGER.md. Paper-only evidence from dexter ~/aura at b69e633 with AURA_ROOT=/var/aura and flags --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only. PF_XBTUSD: IS 71t pnl_fee +13097.14 max_dd 13353; OOS 9t pnl_fee +5557.89 max_dd 6839; pass_oos_gate=false because IS DD >12000. PF_ETHUSD: IS 47t pnl_fee +1247.11 max_dd 762.6; OOS 17t pnl_fee -500.29 max_dd 783.6; pass_oos_gate=false because ETH OOS is negative and loses to ETH baseline +420.02. New id only; do not revive or mutate the prior killed long_only id, and do not mutate kept parent ichi_params_20_60_trend_v0."

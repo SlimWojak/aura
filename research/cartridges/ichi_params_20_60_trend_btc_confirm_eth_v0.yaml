@@ -1,6 +1,6 @@
 id: ichi_params_20_60_trend_btc_confirm_eth_v0
 title: Ichimoku 20 60 ETH trend with BTC same-bar confirm
-status: draft
+status: killed
 thesis: Test whether ETH inherits the provisional 20/60/120/60 trend-gated structure only when BTC confirms the same-side Phase 2 trend and same-bar cloud/TK agreement.
 symbol: PF_ETHUSD
 tf: 1h
@@ -34,11 +34,11 @@ kill_criteria:
   min_trades: 10
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless forced 70/30 ETH IS and OOS beat the fee-on regime-gated ETH ichi_v0_baseline on total_pnl_points_after_fees, ETH OOS fee-on pnl is greater than zero, and the BTC-confirm gate is not a no-op versus plain ETH 20/60 TREND with an identical trade set. Missing or unaligned BTC candles/regime labels fail closed.
+  notes: "Killed by the 2026-08-22 R6 status bank in docs/LEDGER.md; PF_ETHUSD OOS pass_oos_gate=false. IS pnl_fee +766.48 beat the ETH baseline, and OOS pnl_fee +340.61 was positive, but OOS lost to fee-on regime-gated ETH ichi_v0_baseline OOS +420.02. BTC confirm was not a no-op versus parent ETH 20/60 TREND because trades were 36/28 versus parent 88/45, but the cartridge still failed the must-beat OOS baseline gate."
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "R6 Research Intern ETH-positive structure. Paper-only draft; do not mutate kept parent ichi_params_20_60_trend_v0. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_btc_confirm_eth_v0 --symbol PF_ETHUSD --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. Entry requires ETH always_on 20/60/120/60 Chikou-close signal plus same-bar PF_XBTUSD confirm_symbol at the exact ETH ts_ms: BTC Phase 2 label must allow the same side and BTC close-vs-cloud plus TK state must agree. Fail closed if BTC candles, timestamps, or regime labels cannot align."
+notes: "Killed forever by the 2026-08-22 R6 status bank in docs/LEDGER.md. Paper-only evidence from dexter ~/aura at b69e633 with AURA_ROOT=/var/aura and flags --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only. PF_ETHUSD: IS 36t pnl_fee +766.48 max_dd 507.5; OOS 28t pnl_fee +340.61 max_dd 753.1; pass_oos_gate=false. OOS loses to fee-on regime-gated ETH baseline OOS +420.02. BTC confirm wiring stays as drafted with same-bar PF_XBTUSD evidence and is not a no-op versus kept parent ichi_params_20_60_trend_v0 on ETH (36/28 trades versus 88/45), but this id does not supersede or mutate the kept parent."
