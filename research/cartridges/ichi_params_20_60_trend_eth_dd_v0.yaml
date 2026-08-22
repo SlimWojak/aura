@@ -39,4 +39,4 @@ sources:
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "New id only; do not revive or mutate killed parents. Same always_on 20/60/120/60 signal as kept parent ichi_params_20_60_trend_v0 with Chikou close confirmation and bias_flip exits. Forced 70/30 on BTC and ETH; beat fee-on regime-gated baseline on BTC IS+OOS and ETH OOS; BTC maxDD <= 25000. Evidence command: eval_run cartridge --id ichi_params_20_60_trend_eth_dd_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7."
+notes: "new id only; do not revive or mutate killed parents. Same always_on 20/60/120/60 signal as kept parent ichi_params_20_60_trend_v0 with Chikou close confirmation and bias_flip exits. Forced 70/30 on BTC and ETH; beat fee-on regime-gated baseline on BTC IS+OOS and ETH OOS; BTC maxDD <= 25000. Evidence command: eval_run cartridge --id ichi_params_20_60_trend_eth_dd_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7."
