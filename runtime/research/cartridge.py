@@ -62,6 +62,8 @@ ENTRY_FIELDS = {
     "require_tk_state",
     "require_chikou_confirmation",
     "chikou_mode",
+    "confirm_symbol",
+    "require_confirm_same_bar",
     "require_kijun_dip_setup",
     "require_cloud_color_align",
     "setup_bars",
@@ -155,6 +157,18 @@ def validate_cartridge(
         _require_bool(entry_rules, "require_cloud_color_align", f"{label}: entry_rules")
     if "setup_bars" in entry_rules:
         _require_positive_int(entry_rules, "setup_bars", f"{label}: entry_rules")
+    if "confirm_symbol" in entry_rules:
+        _require_string(entry_rules, "confirm_symbol", f"{label}: entry_rules")
+        if "require_confirm_same_bar" not in entry_rules:
+            raise ValueError(
+                f"{label}: entry_rules.require_confirm_same_bar is required when confirm_symbol is set"
+            )
+    if "require_confirm_same_bar" in entry_rules:
+        _require_bool(entry_rules, "require_confirm_same_bar", f"{label}: entry_rules")
+        if "confirm_symbol" not in entry_rules:
+            raise ValueError(
+                f"{label}: entry_rules.confirm_symbol is required when require_confirm_same_bar is set"
+            )
 
     exit_rules = _require_mapping(cartridge, "exit_rules", label)
     _require_fields(exit_rules, EXIT_FIELDS, f"{label}: exit_rules")

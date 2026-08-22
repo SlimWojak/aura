@@ -1,0 +1,42 @@
+id: ichi_v0_trend_eth_primary_v0
+title: Ichimoku v0 ETH primary trend-gated retest
+status: draft
+thesis: Test classic 9/26/52/26 Ichimoku v0 as an ETH-primary Phase 2 trend cartridge rather than treating ETH as a secondary readout of BTC-first experiments.
+symbol: PF_ETHUSD
+tf: 1h
+baseline_ref: ichi_v0_baseline
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+  chikou_mode: close
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 500
+  min_trades: 15
+  must_beat_baseline: true
+  baseline_metric: total_pnl_points_after_fees
+  notes: Kill unless forced 70/30 ETH IS and OOS both beat the fee-on regime-gated ETH baseline on total_pnl_points_after_fees and ETH OOS fee-on pnl is greater than zero. BTC is secondary reporting only when easy, not a kill gate.
+sources:
+  - docs/LEDGER.md
+  - docs/REGIME.md
+  - research/cartridges/ichi_v0_baseline.yaml
+  - runtime/brain/ichimoku.py
+  - runtime/eval/backtest_ichimoku.py
+notes: "R6 Research Intern ETH-positive structure. Paper-only draft under the Phase 2 TREND CLI path: eval_run cartridge --id ichi_v0_trend_eth_primary_v0 --symbol PF_ETHUSD --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. Classic 9/26/52/26 always_on with Chikou close confirmation and bias_flip exits; BTC secondary readout is optional evidence only."

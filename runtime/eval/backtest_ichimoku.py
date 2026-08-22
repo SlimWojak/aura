@@ -54,6 +54,9 @@ _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_regime_exit_v0",
     "ichi_tk_cross_trend_v0",
     "ichi_kumo_break_trend_v0",
+    "ichi_params_20_60_trend_btc_confirm_eth_v0",
+    "ichi_v0_trend_eth_primary_v0",
+    "ichi_params_20_60_trend_long_only_n8_v0",
     "ichi_tk_strong_trend_only_v0",
     "ichi_tk_strong_trend_oos_v0",
     "ichi_tk_strong_trend_kijun_dip_v0",
@@ -131,6 +134,7 @@ def run_backtest_cartridge(
     fee_bps: float = 0.0,
     regime_tf: str | None = None,
     regime_htf: str | None = None,
+    confirm_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run a supported paper research cartridge over supplied candles."""
 
@@ -153,6 +157,10 @@ def run_backtest_cartridge(
     exit_mode = str(exit_rules["mode"])
     if exit_mode == "regime_exit" and safe_regime_tf is None:
         raise ValueError("exit_rules.mode='regime_exit' requires --regime-tf")
+    entry_rules = _mapping(cartridge, "entry_rules")
+    confirm_symbol = _confirm_symbol_from_entry_rules(entry_rules)
+    if confirm_symbol is not None and safe_regime_tf is None:
+        raise ValueError("entry_rules.confirm_symbol requires --regime-tf")
     params = _params_from_cartridge(cartridge)
     resolved_min_bars = min_bars if min_bars is not None else params.minimum_candles
     normalized = _prepare_candles(
@@ -166,7 +174,6 @@ def run_backtest_cartridge(
         _attach_cartridge_metadata(normalized, cartridge=cartridge, runnable=True)
         return normalized
 
-    entry_rules = _mapping(cartridge, "entry_rules")
     chikou_mode = str(entry_rules["chikou_mode"])
     allowed_sides = set(entry_rules["allowed_sides"])
     allowed_entry_sides = None if allowed_sides == {"long", "short"} else allowed_sides
@@ -182,9 +189,23 @@ def run_backtest_cartridge(
         if safe_regime_tf is not None
         else None
     )
+    confirm_gate_provider = (
+        _confirm_entry_gate_provider(
+            primary_candles=normalized,
+            confirm_candles=confirm_candles,
+            confirm_symbol=confirm_symbol,
+            tf=safe_tf,
+            params=params,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+        )
+        if confirm_symbol is not None
+        else None
+    )
     entry_gate_provider = _combine_entry_gate_providers(
         cartridge_gate_provider,
         regime_gate_provider,
+        confirm_gate_provider,
     )
     signal_provider = _signal_provider_for_cartridge(series, cartridge=cartridge)
     report = _score_backtest(
@@ -221,6 +242,20 @@ def run_backtest_cartridge(
                 "remain allowed unless exit_rules.mode='regime_exit', which "
                 "flattens an open side once the current regime no longer "
                 "permits that side."
+            ),
+        }
+    if confirm_symbol is not None:
+        report["confirm_gate"] = {
+            "enabled": True,
+            "symbol": confirm_symbol,
+            "require_same_bar": True,
+            "tf": safe_tf,
+            "regime_tf": safe_regime_tf,
+            "regime_htf": safe_regime_htf,
+            "policy": (
+                "Confirm symbol must have the same bar timestamp, matching "
+                "Phase 2 TREND side, and same-side always-on close/cloud plus "
+                "TK agreement. Missing or misaligned confirm data fails closed."
             ),
         }
     _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
@@ -568,6 +603,17 @@ def cartridge_backtest_from_store(
     safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
     windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    confirm_symbol = _confirm_symbol_from_cartridge(cartridge)
+    confirm_candles = (
+        read_candles(confirm_symbol, safe_tf, aura_root_override=aura_root)
+        if confirm_symbol is not None
+        else None
+    )
+    windowed_confirm_candles = (
+        _window_candles(confirm_candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+        if confirm_candles is not None
+        else None
+    )
     report = run_backtest_cartridge(
         windowed_candles,
         cartridge=cartridge,
@@ -577,9 +623,15 @@ def cartridge_backtest_from_store(
         fee_bps=fee_bps,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
+        confirm_candles=windowed_confirm_candles,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
+    if confirm_symbol is not None:
+        report["confirm_market_path"] = str(
+            ohlcv_path(confirm_symbol, safe_tf, aura_root_override=aura_root)
+        )
+        report["confirm_source_candle_count"] = len(confirm_candles or [])
     report["window"] = {
         "since_ts_ms": since_ts_ms,
         "max_bars": max_bars,
@@ -623,6 +675,17 @@ def cartridge_oos_backtest_from_store(
     safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
     windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    confirm_symbol = _confirm_symbol_from_cartridge(cartridge)
+    confirm_candles = (
+        read_candles(confirm_symbol, safe_tf, aura_root_override=aura_root)
+        if confirm_symbol is not None
+        else None
+    )
+    windowed_confirm_candles = (
+        _window_candles(confirm_candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+        if confirm_candles is not None
+        else None
+    )
     report = run_cartridge_oos_split(
         windowed_candles,
         cartridge=cartridge,
@@ -634,9 +697,15 @@ def cartridge_oos_backtest_from_store(
         regime_htf=regime_htf,
         oos_split=split_fraction,
         cartridge_root=cartridge_root,
+        confirm_candles=windowed_confirm_candles,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
+    if confirm_symbol is not None:
+        report["confirm_market_path"] = str(
+            ohlcv_path(confirm_symbol, safe_tf, aura_root_override=aura_root)
+        )
+        report["confirm_source_candle_count"] = len(confirm_candles or [])
     report["window"] = {
         "since_ts_ms": since_ts_ms,
         "max_bars": max_bars,
@@ -658,6 +727,7 @@ def run_cartridge_oos_split(
     regime_htf: str | None = None,
     oos_split: float = 0.7,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
+    confirm_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run a pre-registered chronological IS/OOS cartridge bake-off."""
 
@@ -667,6 +737,16 @@ def run_cartridge_oos_split(
     split_index = _chronological_split_index(len(candles), split_fraction)
     is_candles = list(candles[:split_index])
     oos_candles = list(candles[split_index:])
+    confirm_is_candles = (
+        _filter_candles_to_timestamps(confirm_candles, reference_candles=is_candles)
+        if confirm_candles is not None
+        else None
+    )
+    confirm_oos_candles = (
+        _filter_candles_to_timestamps(confirm_candles, reference_candles=oos_candles)
+        if confirm_candles is not None
+        else None
+    )
     candidate_is = run_backtest_cartridge(
         is_candles,
         cartridge=cartridge,
@@ -676,6 +756,7 @@ def run_cartridge_oos_split(
         fee_bps=fee_bps,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
+        confirm_candles=confirm_is_candles,
     )
     candidate_oos = run_backtest_cartridge(
         oos_candles,
@@ -686,6 +767,7 @@ def run_cartridge_oos_split(
         fee_bps=fee_bps,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
+        confirm_candles=confirm_oos_candles,
     )
     baseline_is = _run_baseline_backtest(
         is_candles,
@@ -1217,29 +1299,118 @@ def _regime_entry_gate_provider(
     return gate
 
 
-def _combine_entry_gate_providers(
-    cartridge_gate_provider: _EntryGateProvider | None,
-    regime_gate_provider: _EntryGateProvider | None,
-) -> _EntryGateProvider | None:
-    if cartridge_gate_provider is None:
-        return regime_gate_provider
-    if regime_gate_provider is None:
-        return cartridge_gate_provider
+def _confirm_entry_gate_provider(
+    *,
+    primary_candles: Sequence[Mapping[str, Any]],
+    confirm_candles: Sequence[Mapping[str, Any]] | None,
+    confirm_symbol: str,
+    tf: str,
+    params: IchimokuParams,
+    regime_tf: str | None,
+    regime_htf: str | None,
+) -> _EntryGateProvider:
+    safe_confirm_symbol = validate_symbol(confirm_symbol)
+    safe_tf = validate_tf(tf)
+    if regime_tf is None:
+        return _deny_all_entry_gate(
+            reason="confirm_regime_tf_missing",
+            values={"confirm_symbol": safe_confirm_symbol},
+        )
+    safe_regime_tf = validate_tf(regime_tf)
+    safe_regime_htf = validate_tf(regime_htf) if regime_htf is not None else None
+    if not confirm_candles:
+        return _deny_all_entry_gate(
+            reason="confirm_candles_missing",
+            values={"confirm_symbol": safe_confirm_symbol, "tf": safe_tf},
+        )
+
+    prepared = _prepare_candles(
+        confirm_candles,
+        min_bars=params.minimum_candles,
+        symbol=safe_confirm_symbol,
+        tf=safe_tf,
+        params=params,
+    )
+    if isinstance(prepared, dict):
+        return _deny_all_entry_gate(
+            reason="confirm_insufficient_history",
+            values={
+                "confirm_symbol": safe_confirm_symbol,
+                "tf": safe_tf,
+                "candle_count": prepared["candle_count"],
+                "min_bars": prepared["min_bars"],
+            },
+        )
+
+    ts_to_confirm_index: dict[int, int] = {}
+    for confirm_index, candle in enumerate(prepared):
+        ts_ms = _candle_ts_ms(candle)
+        if ts_ms in ts_to_confirm_index:
+            return _deny_all_entry_gate(
+                reason="confirm_duplicate_timestamp",
+                values={"confirm_symbol": safe_confirm_symbol, "ts_ms": ts_ms},
+            )
+        ts_to_confirm_index[ts_ms] = confirm_index
+
+    confirm_series = compute_ichimoku(prepared, params=params)
+    try:
+        confirm_regime_gate_provider = _regime_entry_gate_provider(
+            confirm_candles,
+            symbol=safe_confirm_symbol,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+        )
+    except ValueError as exc:
+        return _deny_all_entry_gate(
+            reason="confirm_regime_unavailable",
+            values={"confirm_symbol": safe_confirm_symbol, "error": str(exc)},
+        )
 
     def gate(index: int, side: Bias) -> Mapping[str, Any]:
-        cartridge_gate = _normalize_entry_gate(cartridge_gate_provider(index, side))
-        regime_gate = _normalize_entry_gate(regime_gate_provider(index, side))
-        if not cartridge_gate["allowed"]:
-            reason = cartridge_gate["reason"]
+        if side == "flat":
+            return {
+                "allowed": True,
+                "reason": "confirm_not_applicable_flat_bias",
+                "values": {"confirm_symbol": safe_confirm_symbol},
+            }
+
+        primary_ts_ms = _candle_ts_ms(primary_candles[index])
+        confirm_index = ts_to_confirm_index.get(primary_ts_ms)
+        if confirm_index is None:
+            return {
+                "allowed": False,
+                "reason": "confirm_bar_missing",
+                "values": {
+                    "confirm_symbol": safe_confirm_symbol,
+                    "primary_ts_ms": primary_ts_ms,
+                    "require_same_bar": True,
+                },
+            }
+
+        cloud_tk_gate = _normalize_entry_gate(
+            _always_on_cloud_tk_confirm_gate(
+                confirm_series,
+                index=confirm_index,
+                side=side,
+                confirm_symbol=safe_confirm_symbol,
+                primary_ts_ms=primary_ts_ms,
+            )
+        )
+        regime_gate = _normalize_entry_gate(confirm_regime_gate_provider(confirm_index, side))
+        if not cloud_tk_gate["allowed"]:
+            reason = cloud_tk_gate["reason"]
         elif not regime_gate["allowed"]:
-            reason = regime_gate["reason"]
+            reason = "confirm_regime_veto"
         else:
-            reason = "entry_gates_passed"
+            reason = "confirm_passed"
         return {
-            "allowed": cartridge_gate["allowed"] and regime_gate["allowed"],
+            "allowed": cloud_tk_gate["allowed"] and regime_gate["allowed"],
             "reason": reason,
             "values": {
-                "cartridge_gate": cartridge_gate,
+                "confirm_symbol": safe_confirm_symbol,
+                "primary_ts_ms": primary_ts_ms,
+                "confirm_index": confirm_index,
+                "cloud_tk_gate": cloud_tk_gate,
                 "regime_gate": regime_gate,
             },
         }
@@ -1247,8 +1418,164 @@ def _combine_entry_gate_providers(
     return gate
 
 
+def _always_on_cloud_tk_confirm_gate(
+    series: Any,
+    *,
+    index: int,
+    side: Bias,
+    confirm_symbol: str,
+    primary_ts_ms: int,
+) -> Mapping[str, Any]:
+    if not series.points:
+        return {
+            "allowed": False,
+            "reason": "confirm_no_candles",
+            "values": {"confirm_symbol": confirm_symbol, "primary_ts_ms": primary_ts_ms},
+        }
+    if not series.ok:
+        return {
+            "allowed": False,
+            "reason": "confirm_series_not_ready",
+            "values": {
+                "confirm_symbol": confirm_symbol,
+                "primary_ts_ms": primary_ts_ms,
+                "series_reason": series.reason,
+            },
+        }
+    if index < 0 or index >= len(series.points):
+        return {
+            "allowed": False,
+            "reason": "confirm_index_missing",
+            "values": {
+                "confirm_symbol": confirm_symbol,
+                "primary_ts_ms": primary_ts_ms,
+                "confirm_index": index,
+            },
+        }
+
+    point = series.points[index]
+    required_components = (
+        point.tenkan,
+        point.kijun,
+        point.senkou_span_a_displaced,
+        point.senkou_span_b_displaced,
+    )
+    if any(value is None for value in required_components):
+        return {
+            "allowed": False,
+            "reason": "confirm_ichimoku_components_missing",
+            "values": {
+                "confirm_symbol": confirm_symbol,
+                "primary_ts_ms": primary_ts_ms,
+                "confirm_ts_ms": point.ts_ms,
+                "confirm_index": index,
+            },
+        }
+
+    tenkan = _required_float(point.tenkan, "confirm_tenkan")
+    kijun = _required_float(point.kijun, "confirm_kijun")
+    span_a = _required_float(point.senkou_span_a_displaced, "confirm_senkou_span_a_displaced")
+    span_b = _required_float(point.senkou_span_b_displaced, "confirm_senkou_span_b_displaced")
+    cloud_top = max(span_a, span_b)
+    cloud_bottom = min(span_a, span_b)
+    close = point.close
+    close_above_cloud = close > cloud_top
+    close_below_cloud = close < cloud_bottom
+    tenkan_above_kijun = tenkan > kijun
+    tenkan_below_kijun = tenkan < kijun
+    if side == "long":
+        allowed = close_above_cloud and tenkan_above_kijun
+    elif side == "short":
+        allowed = close_below_cloud and tenkan_below_kijun
+    else:
+        allowed = False
+    return {
+        "allowed": allowed,
+        "reason": "confirm_cloud_tk_agrees" if allowed else "confirm_cloud_tk_disagree",
+        "values": {
+            "confirm_symbol": confirm_symbol,
+            "primary_ts_ms": primary_ts_ms,
+            "confirm_ts_ms": point.ts_ms,
+            "confirm_index": index,
+            "side": side,
+            "close": close,
+            "cloud_top": cloud_top,
+            "cloud_bottom": cloud_bottom,
+            "tenkan": tenkan,
+            "kijun": kijun,
+            "close_above_cloud": close_above_cloud,
+            "close_below_cloud": close_below_cloud,
+            "tenkan_above_kijun": tenkan_above_kijun,
+            "tenkan_below_kijun": tenkan_below_kijun,
+        },
+    }
+
+
+def _deny_all_entry_gate(*, reason: str, values: Mapping[str, Any]) -> _EntryGateProvider:
+    def gate(index: int, side: Bias) -> Mapping[str, Any]:
+        if side == "flat":
+            return {"allowed": True, "reason": f"{reason}_flat_bias", "values": dict(values)}
+        denied_values = dict(values)
+        denied_values["index"] = index
+        denied_values["side"] = side
+        return {"allowed": False, "reason": reason, "values": denied_values}
+
+    return gate
+
+
+def _combine_entry_gate_providers(
+    cartridge_gate_provider: _EntryGateProvider | None,
+    regime_gate_provider: _EntryGateProvider | None,
+    confirm_gate_provider: _EntryGateProvider | None = None,
+) -> _EntryGateProvider | None:
+    providers = [
+        (name, provider)
+        for name, provider in (
+            ("cartridge_gate", cartridge_gate_provider),
+            ("regime_gate", regime_gate_provider),
+            ("confirm_gate", confirm_gate_provider),
+        )
+        if provider is not None
+    ]
+    if not providers:
+        return None
+    if len(providers) == 1:
+        return providers[0][1]
+
+    def gate(index: int, side: Bias) -> Mapping[str, Any]:
+        gates = [
+            (name, _normalize_entry_gate(provider(index, side)))
+            for name, provider in providers
+        ]
+        reason = "entry_gates_passed"
+        for _name, entry_gate in gates:
+            if not entry_gate["allowed"]:
+                reason = entry_gate["reason"]
+                break
+        return {
+            "allowed": all(entry_gate["allowed"] for _name, entry_gate in gates),
+            "reason": reason,
+            "values": {name: entry_gate for name, entry_gate in gates},
+        }
+
+    return gate
+
+
 def _cartridge_requires_phase2_regime(cartridge: Mapping[str, Any]) -> bool:
     return str(cartridge.get("id", "")) in _PHASE2_REGIME_REQUIRED_CARTRIDGES
+
+
+def _confirm_symbol_from_cartridge(cartridge: Mapping[str, Any]) -> str | None:
+    return _confirm_symbol_from_entry_rules(_mapping(cartridge, "entry_rules"))
+
+
+def _confirm_symbol_from_entry_rules(entry_rules: Mapping[str, Any]) -> str | None:
+    raw_confirm_symbol = entry_rules.get("confirm_symbol")
+    if raw_confirm_symbol is None:
+        return None
+    if not bool(entry_rules.get("require_confirm_same_bar", False)):
+        raise ValueError("entry_rules.require_confirm_same_bar must be true when confirm_symbol is set")
+    return validate_symbol(str(raw_confirm_symbol))
 
 
 def _run_baseline_backtest(
@@ -1361,6 +1688,19 @@ def _chronological_split_index(candle_count: int, split_fraction: float) -> int:
             "oos split must leave at least one candle in both in-sample and out-of-sample halves"
         )
     return split_index
+
+
+def _filter_candles_to_timestamps(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    reference_candles: Sequence[Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    reference_timestamps = {_candle_ts_ms(candle) for candle in reference_candles}
+    return [
+        candle
+        for candle in candles
+        if _candle_ts_ms(candle) in reference_timestamps
+    ]
 
 
 def _signal_provider_for_cartridge(

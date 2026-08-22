@@ -26,8 +26,10 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_params_20_60_v0",
                 "ichi_params_20_60_er_v0",
                 "ichi_params_20_60_trend_v0",
+                "ichi_params_20_60_trend_btc_confirm_eth_v0",
                 "ichi_params_20_60_trend_eth_dd_v0",
                 "ichi_params_20_60_trend_long_only_v0",
+                "ichi_params_20_60_trend_long_only_n8_v0",
                 "ichi_params_20_60_trend_regime_exit_v0",
                 "ichi_params_20_60_trend_timestop_v0",
                 "ichi_tenkan_bounce_trend_v0",
@@ -38,6 +40,7 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_tk_strong_trend_only_v0",
                 "ichi_tk_cloud_v0",
                 "ichi_tk_cross_trend_v0",
+                "ichi_v0_trend_eth_primary_v0",
                 "ichi_v0_baseline",
             },
             {cartridge["id"] for cartridge in cartridges},
@@ -45,14 +48,23 @@ class ResearchCartridgeTests(TestCase):
         for cartridge in cartridges:
             with self.subTest(cartridge=cartridge["id"]):
                 self.assertIn(cartridge["status"], {"draft", "queued", "killed", "kept"})
-                self.assertEqual("PF_XBTUSD", cartridge["symbol"])
+                if cartridge["id"] in {
+                    "ichi_params_20_60_trend_btc_confirm_eth_v0",
+                    "ichi_v0_trend_eth_primary_v0",
+                }:
+                    self.assertEqual("PF_ETHUSD", cartridge["symbol"])
+                else:
+                    self.assertEqual("PF_XBTUSD", cartridge["symbol"])
                 self.assertEqual("1h", cartridge["tf"])
                 self.assertIn(
                     cartridge["baseline_ref"],
                     {"ichimoku_v0", "ichi_tk_strong_trend_only_v0", "ichi_v0_baseline"},
                 )
                 allowed_sides = set(cartridge["entry_rules"]["allowed_sides"])
-                if cartridge["id"] == "ichi_params_20_60_trend_long_only_v0":
+                if cartridge["id"] in {
+                    "ichi_params_20_60_trend_long_only_v0",
+                    "ichi_params_20_60_trend_long_only_n8_v0",
+                }:
                     self.assertEqual({"long"}, allowed_sides)
                 else:
                     self.assertEqual({"long", "short"}, allowed_sides)
@@ -233,6 +245,38 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("docs/LEDGER.md", regime_exit["sources"])
         self.assertIn("BTC OOS fee-negative and DD >12000", regime_exit["notes"])
         self.assertIn("PF_XBTUSD OOS pass_oos_gate=false", regime_exit["kill_criteria"]["notes"])
+
+    def test_round_six_research_intern_cartridges_load_requested_modes(self):
+        btc_confirm = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_params_20_60_trend_btc_confirm_eth_v0.yaml"
+        )
+        eth_primary = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_trend_eth_primary_v0.yaml")
+        long_only_n8 = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_params_20_60_trend_long_only_n8_v0.yaml"
+        )
+
+        self.assertEqual("PF_ETHUSD", btc_confirm["symbol"])
+        self.assertEqual("PF_XBTUSD", btc_confirm["entry_rules"]["confirm_symbol"])
+        self.assertTrue(btc_confirm["entry_rules"]["require_confirm_same_bar"])
+        self.assertEqual(20, btc_confirm["ichimoku"]["tenkan"])
+        self.assertEqual(60, btc_confirm["ichimoku"]["kijun"])
+        self.assertEqual(2000, btc_confirm["kill_criteria"]["max_dd_points"])
+        self.assertEqual(10, btc_confirm["kill_criteria"]["min_trades"])
+        self.assertIn("no-op", btc_confirm["kill_criteria"]["notes"])
+        self.assertIn("same-bar PF_XBTUSD", btc_confirm["notes"])
+
+        self.assertEqual("PF_ETHUSD", eth_primary["symbol"])
+        self.assertEqual(9, eth_primary["ichimoku"]["tenkan"])
+        self.assertEqual(26, eth_primary["ichimoku"]["kijun"])
+        self.assertEqual(500, eth_primary["kill_criteria"]["max_dd_points"])
+        self.assertEqual(15, eth_primary["kill_criteria"]["min_trades"])
+        self.assertIn("BTC is secondary", eth_primary["kill_criteria"]["notes"])
+
+        self.assertEqual("PF_XBTUSD", long_only_n8["symbol"])
+        self.assertEqual(["long"], long_only_n8["entry_rules"]["allowed_sides"])
+        self.assertEqual(8, long_only_n8["kill_criteria"]["min_trades"])
+        self.assertEqual(12000, long_only_n8["kill_criteria"]["max_dd_points"])
+        self.assertIn("New id only", long_only_n8["kill_criteria"]["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")
