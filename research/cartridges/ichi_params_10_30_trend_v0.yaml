@@ -1,6 +1,6 @@
 id: ichi_params_10_30_trend_v0
 title: Ichimoku 10 30 trend-gated OOS variant
-status: draft
+status: killed
 thesis: Test a mid-pack 10/30/60/30 always-on Ichimoku parameter family under the Phase 2 trend veto against the fee-on regime-gated baseline.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,11 +32,11 @@ kill_criteria:
   min_trades: 12
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless the forced 70/30 fee-on regime-gated IS and OOS halves beat ichi_v0_baseline with at least 12 trades and maxDD no greater than 25000 points; ETH OOS is secondary evidence.
+  notes: Killed by the 2026-08-22 R4 Curator status bank in docs/LEDGER.md because BTC OOS was thin and ETH failed; it does not displace the 20/60 keep.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "Mid pack 10/30/60/30 always_on under TREND_* via the Phase 2 CLI regime hard veto. Same entry and exit shape as baseline always_on: close outside cloud, TK state aligned, Chikou close confirmation, and bias_flip exits. Forced 70/30; beat fee-on regime-gated baseline IS+OOS; ETH OOS secondary; maxDD 25000."
+notes: "Killed by the 2026-08-22 R4 Curator status bank in docs/LEDGER.md. Mid pack 10/30/60/30 always_on under TREND_* via the Phase 2 CLI regime hard veto. Same entry and exit shape as baseline always_on: close outside cloud, TK state aligned, Chikou close confirmation, and bias_flip exits. Evidence command: eval_run cartridge --id ichi_params_10_30_trend_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. PF_XBTUSD OOS pass_oos_gate=true but thin; PF_ETHUSD OOS pass_oos_gate=false. Does not displace the 20/60 keep."
