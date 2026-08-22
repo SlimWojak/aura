@@ -85,6 +85,7 @@ def merge_candles(
     candles: Iterable[Mapping[str, Any]],
     *,
     aura_root_override: str | Path | None = None,
+    backfill_pages: int = 0,
 ) -> dict[str, Any]:
     """Idempotently upsert candles by ``ts_ms`` and rewrite sorted JSONL."""
 
@@ -103,6 +104,7 @@ def merge_candles(
         tf,
         merged,
         aura_root_override=aura_root_override,
+        backfill_pages=backfill_pages,
     )
     return {
         "symbol": validate_symbol(symbol),
@@ -111,6 +113,7 @@ def merge_candles(
         "meta_path": str(meta_path(symbol, aura_root_override=aura_root_override)),
         "fetched_count": incoming_count,
         "stored_count": len(merged),
+        "earliest_ts_ms": merged[0]["ts_ms"] if merged else None,
         "latest_ts_ms": merged[-1]["ts_ms"] if merged else None,
         "source": SOURCE,
         "meta": meta,
@@ -151,6 +154,18 @@ def read_latest_ts_ms(
     return int(candles[-1]["ts_ms"])
 
 
+def read_earliest_ts_ms(
+    symbol: str,
+    tf: str,
+    *,
+    aura_root_override: str | Path | None = None,
+) -> int | None:
+    candles = read_candles(symbol, tf, aura_root_override=aura_root_override)
+    if not candles:
+        return None
+    return int(candles[0]["ts_ms"])
+
+
 def status(*, aura_root_override: str | Path | None = None) -> dict[str, Any]:
     root = market_root(aura_root_override)
     ohlcv_root = root / "ohlcv"
@@ -167,6 +182,7 @@ def status(*, aura_root_override: str | Path | None = None) -> dict[str, Any]:
                         "tf": tf,
                         "path": str(candle_path),
                         "candle_count": len(candles),
+                        "earliest_ts_ms": candles[0]["ts_ms"] if candles else None,
                         "latest_ts_ms": candles[-1]["ts_ms"] if candles else None,
                     }
                 )
@@ -208,6 +224,7 @@ def write_meta(
     candles: list[Mapping[str, Any]],
     *,
     aura_root_override: str | Path | None = None,
+    backfill_pages: int = 0,
 ) -> dict[str, Any]:
     safe_symbol = validate_symbol(symbol)
     safe_tf = validate_tf(tf)
@@ -215,10 +232,20 @@ def write_meta(
     now = utc_now_iso()
     existing = read_meta_file(path)
     tfs = dict(existing.get("tfs", {})) if isinstance(existing.get("tfs"), Mapping) else {}
+    funding = existing.get("funding") if isinstance(existing.get("funding"), Mapping) else None
+    previous_tf = tfs.get(safe_tf) if isinstance(tfs.get(safe_tf), Mapping) else {}
+    previous_backfill_pages = integer_value(previous_tf.get("backfill_pages"))
+    if previous_backfill_pages is None:
+        previous_backfill_pages = 0
+    total_backfill_pages = previous_backfill_pages + backfill_pages
+    earliest_ts_ms = int(candles[0]["ts_ms"]) if candles else None
     latest_ts_ms = int(candles[-1]["ts_ms"]) if candles else None
     tfs[safe_tf] = {
+        "earliest_ts_ms": earliest_ts_ms,
+        "latest_ts_ms": latest_ts_ms,
         "last_ts_ms": latest_ts_ms,
         "candle_count": len(candles),
+        "backfill_pages": total_backfill_pages,
         "source": SOURCE,
         "refreshed_at": now,
     }
@@ -226,11 +253,17 @@ def write_meta(
         "schema": META_SCHEMA,
         "symbol": safe_symbol,
         "tf": safe_tf,
+        "earliest_ts_ms": earliest_ts_ms,
+        "latest_ts_ms": latest_ts_ms,
         "last_ts_ms": latest_ts_ms,
+        "candle_count": len(candles),
+        "backfill_pages": total_backfill_pages,
         "source": SOURCE,
         "refreshed_at": now,
         "tfs": tfs,
     }
+    if funding is not None:
+        meta["funding"] = dict(funding)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return meta
