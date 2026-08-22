@@ -1,8 +1,8 @@
 # Aura runtime skeleton
 
-Paper-only runtime stubs for the future dexter runner. There is no strategy
-logic, live order placement, Kraken API call, systemd unit, or constellation
-import in this scaffold.
+Paper-only runtime scaffolding for the future dexter runner. There is no
+strategy logic, live order placement, private Kraken API call, systemd unit, or
+constellation import in this scaffold.
 
 ## Module map
 
