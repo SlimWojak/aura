@@ -31,6 +31,7 @@ ENTRY_MODES = {
     "tenkan_bounce",
     "kumo_break",
     "vol_di_expand_trend",
+    "enrich_fvg_flat_spanb_trend",
 }
 SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
@@ -98,6 +99,8 @@ ENTRY_FIELDS = {
     "di_spread_delta_min",
     "di_expansion_lookback",
     "price_cloud_distance_atr_min",
+    "flat_spanb_bars_min",
+    "require_fvg_side_align",
 }
 REQUIRED_ENTRY_FIELDS = {
     "mode",
@@ -210,6 +213,12 @@ def validate_cartridge(
             },
             f"{label}: entry_rules",
         )
+    if entry_rules["mode"] == "enrich_fvg_flat_spanb_trend":
+        _require_fields(
+            entry_rules,
+            {"flat_spanb_bars_min", "require_fvg_side_align"},
+            f"{label}: entry_rules",
+        )
     if "di_period" in entry_rules:
         _require_positive_int(entry_rules, "di_period", f"{label}: entry_rules")
     if "di_spread_min" in entry_rules:
@@ -224,6 +233,10 @@ def validate_cartridge(
             "price_cloud_distance_atr_min",
             f"{label}: entry_rules",
         )
+    if "flat_spanb_bars_min" in entry_rules:
+        _require_positive_int(entry_rules, "flat_spanb_bars_min", f"{label}: entry_rules")
+    if "require_fvg_side_align" in entry_rules:
+        _require_bool(entry_rules, "require_fvg_side_align", f"{label}: entry_rules")
     if "confirm_symbol" in entry_rules:
         _require_string(entry_rules, "confirm_symbol", f"{label}: entry_rules")
         if "require_confirm_same_bar" not in entry_rules:

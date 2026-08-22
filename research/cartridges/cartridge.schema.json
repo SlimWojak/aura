@@ -87,7 +87,8 @@
             "kijun_bounce",
             "tenkan_bounce",
             "kumo_break",
-            "vol_di_expand_trend"
+            "vol_di_expand_trend",
+            "enrich_fvg_flat_spanb_trend"
           ]
         },
         "allowed_sides": {
@@ -150,6 +151,14 @@
         "price_cloud_distance_atr_min": {
           "type": "number",
           "minimum": 0
+        },
+        "flat_spanb_bars_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "require_fvg_side_align": {
+          "type": "boolean",
+          "default": true
         }
       },
       "dependentRequired": {

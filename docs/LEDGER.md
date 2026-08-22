@@ -530,15 +530,18 @@ cartridge YAML/status changes, no cartridge revival, no Intern unlock, no
 lower-timeframe ingest, no live scopes, and no Track A loosening. Intern remains
 frozen and Track A is unchanged.
 
-## 2026-08-22 enrichment lane harness stub
+## 2026-08-22 enrichment lane IC run
 
-Repo harness/features only; no dexter run result is recorded here.
+Paper-only CoS enrichment IC feature screen bank at main tip `86d4ca2`.
+Evidence path:
+`/var/aura/evidence/evals/ic-screen-enrichment-20260822/` (`report.json`,
+`scores.csv`, `SUMMARY.md`, `run.log`).
 
 Scope: locked enrichment lane for Daily DR, Daily FVG, Chikou-vs-Daily-DR, and
 Daily-FVG/flat-Span-B IC-screen features. Definitions and fence are registered
 in `docs/briefs/2026-08-22-enrichment-lane.md`.
 
-CLI stub:
+Command:
 ```bash
 python3 -m runtime.tools.eval_run ic-screen \
   --aura-root /var/aura \
@@ -550,8 +553,21 @@ python3 -m runtime.tools.eval_run ic-screen \
   --output-id ic-screen-enrichment-20260822
 ```
 
-No cartridge YAML/status changes, no killed-id revival, no Intern unlock, no
-lower-timeframe ADDR, no live scopes, and no Track A loosening.
+Harness contract: feature-set `enrichment`; forward ATR-normalized returns at
+horizons 4/12/24/48; HAC CIs for overlapping returns; Benjamini-Hochberg
+q-values across emitted feature tests. Kill rule remains strict: a feature is
+dead only when every usable CI spans 0 on both symbols.
+
+| Bucket | Features | CoS read |
+|---|---|---|
+| Dead features | `chikou_clears_daily_dr`, `chikou_daily_dr_clearance_atr`, `daily_fvg_distance_atr`, `daily_fvg_price_inside` | Every usable CI spans 0 on both symbols. The rank-1 Chikou x Daily DR thesis is IC-dead; do not mill cartridges on these dead features. |
+| Both-symbol nonzero-CI survivors | `daily_dr_side`, `daily_dr_position`, `fvg_flat_spanb_overlap`, `daily_fvg_side` | Candidate features only. Best BH q-values remain about `0.19` to `0.24`, so none clear conventional BH `0.05`. |
+
+CoS disposition: **evidence bank only**. The enrichment lane does not loosen
+Track A, unlock Intern, revive killed ids, add lower-timeframe ADDR, change
+control statuses, or add live scopes. Next cartridge work should prioritize the
+rank-2 Daily FVG/flat-Span-B overlap thesis over dead Chikou x Daily DR
+features.
 
 ## 2026-08-22 failed DI-expansion bake-off
 
