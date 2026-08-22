@@ -9,6 +9,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from runtime.runner import run_supervised_order
+from runtime.runner.supervised_paper import map_account_state
 
 
 def completed(payload):
@@ -112,32 +113,20 @@ class SupervisedPaperRunnerTests(TestCase):
         self.assertEqual("allow", event["risk_gate"]["result"])
         self.assertEqual("dry_run", event["venue"]["response"]["reason"])
 
-    def test_missing_weekly_pnl_fails_closed(self):
-        with patch("runtime.runner.supervised_paper.subprocess.run") as run:
-            run.side_effect = [
-                completed({"equity": 10_000, "pnl": 0}),
-                completed([]),
-            ]
-
-            result = run_supervised_order(
-                trial_id="T-missing-weekly",
-                symbol="PF_XBTUSD",
-                side="buy",
-                size="0.001",
-                leverage="1",
-                client_order_id="aura-test-missing-weekly",
-                notional_usd="100",
-                aura_root=self.aura_root,
-                kraken_bin="/tmp/kraken",
-            )
-
-        self.assertFalse(result.admission.allowed)
-        self.assertFalse(result.order_called)
-        self.assertEqual(2, run.call_count)
-        self.assertIn("account_state weekly_pnl missing or invalid", result.admission.reasons)
-        self.assertIn(
-            "weekly_pnl unavailable in futures paper status; failing closed",
-            result.account_state["mapping_reasons"],
+    def test_missing_weekly_uses_pnl_as_session_proxy(self):
+        status = {"equity": "10000", "pnl": "-1.5", "positions": 0}
+        positions = {"positions": []}
+        state = map_account_state(
+            status=status,
+            positions=positions,
+            aura_root=None,
+            observed_at=__import__('datetime').datetime.now(__import__('datetime').UTC),
+            mapping_reasons=[],
+        )
+        self.assertEqual(state["daily_pnl"], "-1.5")
+        self.assertEqual(state["weekly_pnl"], "-1.5")
+        self.assertTrue(
+            any("paper-session proxy" in reason for reason in state["mapping_reasons"])
         )
 
     def read_event(self, trial_id):

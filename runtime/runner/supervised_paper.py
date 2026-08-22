@@ -292,7 +292,14 @@ def map_account_state(
         mapping_reasons.append("equity unavailable in futures paper status")
     if daily_pnl is None:
         mapping_reasons.append("daily_pnl unavailable in futures paper status")
-    if weekly_pnl is None:
+    if weekly_pnl is None and daily_pnl is not None:
+        # Kraken futures paper status exposes a single pnl field, not a weekly series.
+        # Use that value as a paper-session weekly proxy and record the mapping.
+        weekly_pnl = daily_pnl
+        mapping_reasons.append(
+            "weekly_pnl absent in futures paper status; using pnl/daily_pnl as paper-session proxy"
+        )
+    elif weekly_pnl is None:
         mapping_reasons.append("weekly_pnl unavailable in futures paper status; failing closed")
     if open_positions_count is None:
         mapping_reasons.append("open_positions_count unavailable in futures paper positions")
