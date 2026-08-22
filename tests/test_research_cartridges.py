@@ -434,10 +434,10 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("190.88", cloud_bias["notes"])
         self.assertIn("trades 362 versus 338", cloud_bias["kill_criteria"]["notes"])
 
-    def test_one_shot_four_hour_cloud_bias_draft_loads_requested_contract(self):
+    def test_one_shot_four_hour_cloud_bias_kill_loads_requested_contract(self):
         cartridge = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_bias_tsmom_4h_v0.yaml")
 
-        self.assertEqual("draft", cartridge["status"])
+        self.assertEqual("killed", cartridge["status"])
         self.assertEqual("PF_XBTUSD", cartridge["symbol"])
         self.assertEqual("4h", cartridge["tf"])
         self.assertEqual("ichi_v0_baseline", cartridge["baseline_ref"])
@@ -448,8 +448,12 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
         self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
         self.assertEqual(12, cartridge["kill_criteria"]["min_trades"])
-        self.assertIn("Eval MUST use --tf 4h", cartridge["kill_criteria"]["notes"])
-        self.assertIn("Require stored 4h.jsonl; no 1h fallback", cartridge["kill_criteria"]["notes"])
+        self.assertIn("Killed forever", cartridge["kill_criteria"]["notes"])
+        self.assertIn("stored 1h candles only for regime/HTF labels", cartridge["kill_criteria"]["notes"])
+        self.assertIn("IS ATR-normalized return lost", cartridge["kill_criteria"]["notes"])
+        self.assertIn("docs/LEDGER.md", cartridge["sources"])
+        self.assertIn("6a4054c", cartridge["notes"])
+        self.assertIn("do not revive", cartridge["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")
