@@ -11,10 +11,13 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from runtime.eval import (
+    DEFAULT_ATR_PERIOD,
+    DEFAULT_CSCV_GROUPS,
     backtest_from_store,
     cartridge_backtest_from_store,
     cartridge_oos_backtest_from_store,
     runnable_cartridge_ids,
+    score_trial_matrix,
     score_trials,
     write_report,
     write_summary,
@@ -89,6 +92,7 @@ def build_parser() -> ArgumentParser:
         default=0.0,
         help="optional per-side fee in basis points for 1-unit price-point accounting",
     )
+    add_return_stats_args(backtest_parser)
 
     cartridge_parser = subparsers.add_parser(
         "cartridge",
@@ -123,6 +127,7 @@ def build_parser() -> ArgumentParser:
         default=0.0,
         help="optional per-side fee in basis points for 1-unit price-point accounting",
     )
+    add_return_stats_args(cartridge_parser)
     cartridge_parser.add_argument(
         "--regime-tf",
         help="optional Phase 2 hard-veto regime timeframe resampled from stored 1h OHLCV",
@@ -149,6 +154,45 @@ def build_parser() -> ArgumentParser:
     ledger_parser = subparsers.add_parser("ledger", help="rebuild trial ledger summary")
     ledger_parser.add_argument("--aura-root", help="override AURA_ROOT; dexter default is /var/aura")
 
+    matrix_parser = subparsers.add_parser(
+        "matrix",
+        help="score saved eval reports with DSR and CSCV/PBO",
+    )
+    matrix_parser.add_argument(
+        "--reports-dir",
+        required=True,
+        help="directory containing saved eval report.json files, e.g. /var/aura/evidence/evals",
+    )
+    matrix_parser.add_argument(
+        "--trial-count",
+        type=int,
+        help="honest count of every tried parameter variant; defaults to report count",
+    )
+    matrix_parser.add_argument(
+        "--metric",
+        choices=("atr_normalized", "simple"),
+        default="atr_normalized",
+        help="return stream used for DSR/PBO",
+    )
+    matrix_parser.add_argument(
+        "--cscv-groups",
+        type=int,
+        default=DEFAULT_CSCV_GROUPS,
+        help="even number of chronological CSCV groups; default 8",
+    )
+    matrix_parser.add_argument(
+        "--purge-groups",
+        type=int,
+        default=0,
+        help="optional group-level purge around OOS groups for leakage control",
+    )
+    matrix_parser.add_argument(
+        "--embargo-groups",
+        type=int,
+        default=0,
+        help="optional group-level embargo after OOS groups",
+    )
+
     return parser
 
 
@@ -156,6 +200,21 @@ def add_market_args(parser: ArgumentParser) -> None:
     parser.add_argument("--symbol", default=DEFAULT_SYMBOLS[0], help="Kraken futures symbol")
     parser.add_argument("--tf", default=DEFAULT_TFS[0], help="stored OHLCV timeframe")
     parser.add_argument("--aura-root", help="override AURA_ROOT; dexter default is /var/aura")
+
+
+def add_return_stats_args(parser: ArgumentParser) -> None:
+    parser.add_argument(
+        "--atr-period",
+        type=int,
+        default=DEFAULT_ATR_PERIOD,
+        help="Wilder ATR period for unit-risk return normalization",
+    )
+    parser.add_argument(
+        "--trial-count",
+        type=int,
+        default=1,
+        help="honest count of tried variants used to deflate Sharpe for this report",
+    )
 
 
 def dispatch(args: Namespace) -> dict[str, Any]:
@@ -166,6 +225,8 @@ def dispatch(args: Namespace) -> dict[str, Any]:
             return command_cartridge(args)
         case "ledger":
             return command_ledger(args)
+        case "matrix":
+            return command_matrix(args)
         case _:
             raise ValueError(f"unknown command: {args.command}")
 
@@ -181,6 +242,8 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
         fee_bps=args.fee_bps,
+        atr_period=args.atr_period,
+        trial_count=args.trial_count,
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf)
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
@@ -210,6 +273,8 @@ def command_cartridge(args: Namespace) -> dict[str, Any]:
             max_bars=args.max_bars,
             since_ts_ms=parse_since_ts_ms(args.since),
             fee_bps=args.fee_bps,
+            atr_period=args.atr_period,
+            trial_count=args.trial_count,
             regime_tf=args.regime_tf,
             regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
         )
@@ -224,6 +289,8 @@ def command_cartridge(args: Namespace) -> dict[str, Any]:
             max_bars=args.max_bars,
             since_ts_ms=parse_since_ts_ms(args.since),
             fee_bps=args.fee_bps,
+            atr_period=args.atr_period,
+            trial_count=args.trial_count,
             regime_tf=args.regime_tf,
             regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
             oos_split=args.oos_split,
@@ -248,6 +315,17 @@ def command_ledger(args: Namespace) -> dict[str, Any]:
     summary["output_path"] = str(output_path)
     write_summary(summary, aura_root=args.aura_root)
     return summary
+
+
+def command_matrix(args: Namespace) -> dict[str, Any]:
+    return score_trial_matrix(
+        args.reports_dir,
+        trial_count=args.trial_count,
+        groups=args.cscv_groups,
+        metric=args.metric,
+        purge_groups=args.purge_groups,
+        embargo_groups=args.embargo_groups,
+    )
 
 
 def evidence_root(aura_root: str | Path | None) -> Path:

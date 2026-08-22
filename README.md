@@ -14,6 +14,7 @@ Phase 1 design. Pre-strategy-code. No live trading. Human (Slim) retains capital
 - [Agent operating manual](AGENTS.md) — standing seats, worker boundaries, host boundaries, paper-only rules
 - [Dispatch guide](docs/DISPATCH.md) — how CoS routes repo, runtime, and delegate work
 - [Runtime skeleton](runtime/README.md) — reserved paper runner / risk daemon / scribe stubs
+- [Eval harness](docs/EVAL.md) — ATR-normalized returns, DSR, and CSCV/PBO scoring
 
 ## Hard fence
 No constellation write paths, no clinical LaunchAgents, no RIVER writes, no live Kraken scopes until a separate go. See [ISOLATION.md](ISOLATION.md).

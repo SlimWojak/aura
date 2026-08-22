@@ -702,10 +702,13 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(output["ok"])
         report_path = Path(output["outputs"]["report_json"])
         trades_path = Path(output["outputs"]["trades_jsonl"])
+        returns_path = Path(output["outputs"]["returns_jsonl"])
         self.assertTrue(report_path.exists())
         self.assertTrue(trades_path.exists())
+        self.assertTrue(returns_path.exists())
         saved = json.loads(report_path.read_text(encoding="utf-8"))
         self.assertEqual(output["eval_id"], saved["eval_id"])
+        self.assertIn("return_series", saved)
 
     def test_backtest_cli_metrics_only_keeps_stdout_compact_and_windows(self):
         candles = [candle(index, 100 + index) for index in range(120)]
