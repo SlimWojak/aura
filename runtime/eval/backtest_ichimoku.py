@@ -24,7 +24,7 @@ import json
 from typing import Any, Mapping, Sequence
 
 from runtime.brain import compute_ichimoku, signal_from_series
-from runtime.brain.types import Bias, IchimokuParams
+from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
 from runtime.market import ohlcv_path, read_candles, validate_symbol, validate_tf
 
 
@@ -69,6 +69,15 @@ def run_backtest(
         raise ValueError("min_bars must be positive")
 
     normalized = [_normalize_candle(index, candle) for index, candle in enumerate(candles)]
+    if len(normalized) < resolved_min_bars:
+        return _insufficient_history_report(
+            symbol=safe_symbol,
+            tf=safe_tf,
+            candle_count=len(normalized),
+            min_bars=resolved_min_bars,
+            params=resolved_params,
+        )
+
     start_index = resolved_min_bars - 1
     bias_counts: dict[str, int] = {"long": 0, "short": 0, "flat": 0}
     signal_trace: list[dict[str, Any]] = []
@@ -121,6 +130,16 @@ def run_backtest(
 
         if position is not None:
             bars_in_market += 1
+            if int(position["entry_index"]) <= index:
+                marked_equity_points = equity_points + _unrealized_pnl(
+                    position=position,
+                    mark_price=float(normalized[index]["close"]),
+                )
+                peak_equity_points = max(peak_equity_points, marked_equity_points)
+                max_drawdown_points = max(
+                    max_drawdown_points,
+                    peak_equity_points - marked_equity_points,
+                )
 
     if position is not None and normalized:
         final_execution = {
@@ -200,7 +219,7 @@ def signal_for_closed_bar(
     *,
     index: int,
     params: IchimokuParams | None = None,
-) -> Any:
+) -> IchimokuSignal:
     """Compute the signal at ``index`` using no candles after ``index``."""
 
     if index < 0:
@@ -210,6 +229,43 @@ def signal_for_closed_bar(
     resolved_params = params if params is not None else IchimokuParams()
     series = compute_ichimoku(candles[: index + 1], params=resolved_params)
     return signal_from_series(series)
+
+
+def _insufficient_history_report(
+    *,
+    symbol: str,
+    tf: str,
+    candle_count: int,
+    min_bars: int,
+    params: IchimokuParams,
+) -> dict[str, Any]:
+    return {
+        "schema": BACKTEST_REPORT_SCHEMA,
+        "ok": False,
+        "reason": f"insufficient_history: need at least {min_bars} candles, got {candle_count}",
+        "generated_at": utc_now_iso(),
+        "symbol": symbol,
+        "tf": tf,
+        "candle_count": candle_count,
+        "evaluated_bars": 0,
+        "min_bars": min_bars,
+        "params": params.to_dict(),
+        "fee_assumption": FEE_ASSUMPTION,
+        "naive": True,
+        "model": MODEL_DESCRIPTION,
+        "metrics": {
+            "trade_count": 0,
+            "win_rate": 0.0,
+            "total_pnl_points": 0.0,
+            "max_drawdown_points": 0.0,
+            "time_in_market": 0.0,
+            "bars_in_market": 0,
+            "bias_counts": {"long": 0, "short": 0, "flat": 0},
+            "final_bias": "flat",
+        },
+        "trades": [],
+        "signals": [],
+    }
 
 
 def write_report(report: Mapping[str, Any], output_dir: Path) -> dict[str, str]:
@@ -303,6 +359,12 @@ def _close_trade(
         "exit_reason": exit_reason,
         "pnl_points": _stable_float(pnl_points),
     }
+
+
+def _unrealized_pnl(*, position: Mapping[str, Any], mark_price: float) -> float:
+    direction = int(position["direction"])
+    entry_price = float(position["entry_price"])
+    return (mark_price - entry_price) * direction
 
 
 def _finite_float(raw_value: Any, *, field_name: str) -> float:

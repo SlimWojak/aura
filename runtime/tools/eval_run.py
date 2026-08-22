@@ -81,16 +81,19 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf)
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
-    outputs = write_report(report, output_dir)
     report["eval_id"] = eval_id
+    report["outputs"] = {
+        "report_json": str(output_dir / "report.json"),
+        "trades_jsonl": str(output_dir / "trades.jsonl"),
+    }
+    outputs = write_report(report, output_dir)
     report["outputs"] = outputs
-    write_report(report, output_dir)
     return report
 
 
 def command_ledger(args: Namespace) -> dict[str, Any]:
     summary = score_trials(aura_root=args.aura_root)
-    output_path = write_summary(summary, aura_root=args.aura_root)
+    output_path = ledger_summary_path(args.aura_root)
     summary["output_path"] = str(output_path)
     write_summary(summary, aura_root=args.aura_root)
     return summary
@@ -99,6 +102,10 @@ def command_ledger(args: Namespace) -> dict[str, Any]:
 def evidence_root(aura_root: str | Path | None) -> Path:
     root = Path(aura_root) if aura_root is not None else Path(os.environ.get("AURA_ROOT", str(DEFAULT_AURA_ROOT)))
     return root / "evidence"
+
+
+def ledger_summary_path(aura_root: str | Path | None) -> Path:
+    return evidence_root(aura_root) / "ledger" / "summary.json"
 
 
 def default_eval_id(*, symbol: str, tf: str) -> str:
