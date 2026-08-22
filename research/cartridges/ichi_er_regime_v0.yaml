@@ -1,7 +1,7 @@
-id: ichi_adx_regime_v0
-title: Ichimoku v0 with ADX regime gate
-status: killed
-thesis: Keep the baseline Ichimoku entries but only evaluate them when trend strength is high enough, reducing chop exposure that hurt the always-on backtest.
+id: ichi_er_regime_v0
+title: Ichimoku v0 with ER regime gate
+status: queued
+thesis: Intern round-2 thesis that Kaufman Efficiency Ratio should filter chop better than ADX and improve expectancy while preserving baseline Ichimoku exits.
 symbol: PF_XBTUSD
 tf: 1h
 baseline_ref: ichimoku_v0
@@ -25,17 +25,17 @@ exit_rules:
   close_on_opposite: true
   max_bars_in_trade: null
 regime:
-  type: adx
+  type: er
   params:
-    period: 14
-    threshold: 25
+    period: 10
+    threshold: 0.3
 kill_criteria:
   max_dd_points: 9000
   min_trades: 30
   must_beat_baseline: true
-  baseline_metric: max_drawdown_points
-  notes: Kill if drawdown is not materially lower than baseline or if trade count is too small to trust.
+  baseline_metric: total_pnl_points
+  notes: Kill unless ER-gated raw or fee-adjusted total PnL beats the baseline with a usable sample.
 sources:
   - docs/BUILD_PLAN.md
-  - https://www.investopedia.com/terms/a/adx.asp
-notes: Killed after Research Intern round-2 triage; superseded by ER expectancy test in ichi_er_regime_v0.
+  - research/cartridges/ichi_adx_regime_v0.yaml
+notes: "Intern: ER better than ADX for expectancy. Entries require ER >= 0.3; exits follow baseline bias flips."

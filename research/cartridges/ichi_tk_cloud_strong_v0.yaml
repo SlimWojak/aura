@@ -1,7 +1,7 @@
-id: ichi_tk_cloud_v0
-title: TK cross with cloud-side bias
-status: killed
-thesis: Require a Tenkan Kijun cross or state change to agree with the close being on the correct side of the cloud before taking Ichimoku direction.
+id: ichi_tk_cloud_strong_v0
+title: Strong TK cross outside cloud
+status: queued
+thesis: Upgrade the phase-2 TK-cloud seed to require a true Tenkan Kijun cross event with both TK lines and close fully outside the displaced cloud before taking a new paper entry.
 symbol: PF_XBTUSD
 tf: 1h
 baseline_ref: ichimoku_v0
@@ -17,7 +17,7 @@ entry_rules:
     - short
   require_close_vs_cloud: above_for_long_below_for_short
   require_tk_state: tk_cross_only
-  require_chikou_confirmation: true
+  require_chikou_confirmation: false
   chikou_mode: close
 exit_rules:
   mode: flat_on_rule_fail
@@ -32,8 +32,8 @@ kill_criteria:
   min_trades: 25
   must_beat_baseline: true
   baseline_metric: total_pnl_points
-  notes: Kill if fewer but stricter entries do not improve total points or drawdown versus baseline.
+  notes: Kill unless strict TK-cloud entries beat baseline total PnL after fees when fee_bps is set.
 sources:
   - docs/BUILD_PLAN.md
   - runtime/brain/ichimoku.py
-notes: Superseded by ichi_tk_cloud_strong_v0; keep this original phase-2 sketch for provenance, but do not run it.
+notes: "Long iff tk_bull_cross and tenkan, kijun, and close are all above kumo_top; short mirrors below kumo_bot. Fail closed if displaced spans are missing. Fee-aware scoring required."

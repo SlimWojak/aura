@@ -26,15 +26,29 @@ machine-readable handoff between the Research Intern and CoS.
      `python -m runtime.tools.eval_run backtest --symbol PF_XBTUSD --tf 1h`.
    - Supported cartridges run through the cartridge eval command:
      ```bash
-     python -m runtime.tools.eval_run cartridge --id ichi_v0_baseline --symbol PF_XBTUSD --tf 1h --metrics-only
-     python -m runtime.tools.eval_run cartridge --id ichi_adx_regime_v0 --symbol PF_XBTUSD --tf 1h --metrics-only
-     python -m runtime.tools.eval_run cartridge --id ichi_params_20_60_v0 --symbol PF_XBTUSD --tf 1h --metrics-only
-     python -m runtime.tools.eval_run cartridge --id ichi_chikou_open_space_v0 --symbol PF_XBTUSD --tf 1h --metrics-only
+     python -m runtime.tools.eval_run cartridge --id ichi_v0_baseline --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
+     python -m runtime.tools.eval_run cartridge --id ichi_er_regime_v0 --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
+     python -m runtime.tools.eval_run cartridge --id ichi_cloud_thickness_v0 --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
+     python -m runtime.tools.eval_run cartridge --id ichi_params_20_60_v0 --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
+     python -m runtime.tools.eval_run cartridge --id ichi_params_20_60_er_v0 --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
+     python -m runtime.tools.eval_run cartridge --id ichi_tk_cloud_strong_v0 --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
      ```
+   - `--fee-bps` is optional and defaults to `0`. When set, reports preserve
+     raw `total_pnl_points` and add `total_pnl_points_after_fees` using the
+     documented 1-unit price-point fee model:
+     `fee_bps / 10000 * (entry_price + exit_price)` per closed trade.
    - Current runnable cartridge features are baseline Ichimoku v0, alternate
-     Ichimoku parameters, strict Chikou open-space confirmation, and ADX entry
-     gating. `ichi_tk_cloud_v0` remains a phase-2 seed until eval distinguishes
-     TK cross events from the current baseline TK state.
+     Ichimoku parameters, ER entry gating, displaced-cloud thickness gating,
+     and the strong TK-cloud cross-event rule. Killed cartridges such as
+     `ichi_adx_regime_v0`, `ichi_chikou_open_space_v0`, and the superseded
+     `ichi_tk_cloud_v0` are retained for provenance but are not runnable.
+   - Dexter smoke:
+     ```bash
+     export AURA_ROOT=/var/aura
+     for id in ichi_v0_baseline ichi_er_regime_v0 ichi_cloud_thickness_v0 ichi_params_20_60_v0 ichi_params_20_60_er_v0 ichi_tk_cloud_strong_v0; do
+       python3.12 -m runtime.tools.eval_run cartridge --id $id --symbol PF_XBTUSD --tf 1h --metrics-only --fee-bps 4
+     done
+     ```
 5. **Ledger kill/keep**
    - Results are recorded in the eval/trial ledger with the cartridge id,
      baseline reference, and a short kill/keep rationale.

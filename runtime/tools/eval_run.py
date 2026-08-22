@@ -82,6 +82,12 @@ def build_parser() -> ArgumentParser:
         action="store_true",
         help="print compact metrics JSON; full report and trades JSONL are still written",
     )
+    backtest_parser.add_argument(
+        "--fee-bps",
+        type=float,
+        default=0.0,
+        help="optional per-side fee in basis points for 1-unit price-point accounting",
+    )
 
     cartridge_parser = subparsers.add_parser(
         "cartridge",
@@ -109,6 +115,12 @@ def build_parser() -> ArgumentParser:
         "--metrics-only",
         action="store_true",
         help="print compact metrics JSON; full report and trades JSONL are still written",
+    )
+    cartridge_parser.add_argument(
+        "--fee-bps",
+        type=float,
+        default=0.0,
+        help="optional per-side fee in basis points for 1-unit price-point accounting",
     )
 
     ledger_parser = subparsers.add_parser("ledger", help="rebuild trial ledger summary")
@@ -145,6 +157,7 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
         min_bars=args.min_bars,
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
+        fee_bps=args.fee_bps,
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf)
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
@@ -172,6 +185,7 @@ def command_cartridge(args: Namespace) -> dict[str, Any]:
         min_bars=args.min_bars,
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
+        fee_bps=args.fee_bps,
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf, cartridge_id=report["cartridge"]["id"])
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
@@ -249,6 +263,9 @@ def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
         "evaluated_bars",
         "min_bars",
         "params",
+        "fee_bps",
+        "fee_assumption",
+        "fee_model",
         "cartridge",
         "engine",
         "window",

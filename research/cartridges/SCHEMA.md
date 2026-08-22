@@ -99,13 +99,15 @@ Allowed `regime.type` values:
 - `none`: no regime filter.
 - `adx`: only admit signals when Average Directional Index is above a threshold.
   Proposed first defaults are `period: 14`, `threshold: 20` or `25`.
-- `er`: Kaufman efficiency ratio style chop filter. Suggested params:
-  `period`, `threshold`.
+- `er`: Kaufman Efficiency Ratio chop filter. Current runnable params:
+  `period`, `threshold`; entries are admitted when ER is at or above the
+  threshold.
 - `cloud_thickness`: only trade when Ichimoku cloud thickness exceeds a minimum.
-  Suggested params: `min_points` or `min_pct`.
+  Current runnable params: `min_pct`, computed as
+  `(kumo_top - kumo_bot) / close * 100` from displaced spans.
 
-Regime gates are research descriptions until eval wiring exists. They must fail
-closed in future runtime integration: if the gate cannot be computed, no trade.
+Runnable regime gates fail closed: if the gate cannot be computed, no new entry
+is admitted. Exits continue to follow the cartridge exit rules.
 
 ## Kill criteria vocabulary
 

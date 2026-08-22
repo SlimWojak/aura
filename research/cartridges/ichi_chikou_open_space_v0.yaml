@@ -1,6 +1,6 @@
 id: ichi_chikou_open_space_v0
 title: Strict Chikou open-space filter
-status: queued
+status: killed
 thesis: Keep the baseline cloud and Tenkan Kijun state, but require current close to clear the full candle range from the displaced Chikou reference bar so entries avoid crowded prior price action.
 symbol: PF_XBTUSD
 tf: 1h
@@ -36,4 +36,4 @@ kill_criteria:
 sources:
   - docs/BUILD_PLAN.md
   - runtime/brain/ichimoku.py
-notes: Strict Chikou compares long entries against high[t-displacement] and short entries against low[t-displacement] while preserving baseline cloud and TK state.
+notes: Killed after Research Intern round-2 triage; strict Chikou open-space did not remain a priority versus ER and cloud-thickness gates.
