@@ -1,8 +1,8 @@
 # Aura runtime skeleton
 
-Paper-only runtime stubs for the future dexter runner. There is no strategy
-logic, live order placement, Kraken API call, systemd unit, or constellation
-import in this scaffold.
+Paper-only runtime scaffolding for the future dexter runner. There is no
+strategy logic, live order placement, private Kraken API call, systemd unit, or
+constellation import in this scaffold.
 
 ## Module map
 
@@ -23,6 +23,9 @@ import in this scaffold.
   - `run_hard_kill(...)` is the explicit hard-kill escape hatch: it writes
     `hard`, cancels all futures paper orders, and flattens futures paper
     positions without going through `admit()`.
+- `runtime.market`
+  - Thin OHLCV file spine sourced only from public Kraken Futures Charts HTTPS
+    GETs. It stores normalized candles as JSONL for later Ichimoku v0 work.
 - `runtime.tools.admit_smoke`
   - Human-triggered smoke entrypoint for CoS; no daemon and no venue call.
 - `runtime.tools.supervised_paper`
@@ -30,6 +33,9 @@ import in this scaffold.
 - `runtime.tools.kill_drill`
   - Human-triggered soft/hard/arm/heartbeat/dead-man/drill CLI. No systemd unit
     and no strategy logic.
+- `runtime.tools.market_ingest`
+  - Human-triggered CLI to pull/status/show futures OHLCV files. No strategy,
+    no subprocess Kraken command, and no live trading path.
 
 ## Risk gate inputs
 
@@ -163,6 +169,64 @@ ${AURA_ROOT:-/var/aura}/evidence/trials/T-kill-.../decision.jsonl
 
 Drills can mix `aura.kill_event.v1` ops records and `aura.decision_event.v1`
 supervised admission records in the same trial JSONL.
+
+## Market OHLCV spine
+
+The market spine is deterministic file ingest for later brains. It has no
+Ichimoku logic, no strategy, no daemon, and no order path. Candles come from the
+public Kraken Futures Charts REST endpoint:
+
+```text
+GET https://futures.kraken.com/api/charts/v1/trade/{symbol}/{tf}
+```
+
+The endpoint path includes `trade` because that is Kraken's chart namespace; it
+is not a trade command. The runtime does not call `kraken ohlc` for this spine
+and does not invoke any Kraken CLI command while pulling candles.
+
+Default symbol/timeframe:
+
+```text
+PF_XBTUSD / 1h
+```
+
+`PF_ETHUSD` is available explicitly through `--symbol PF_ETHUSD` or
+`--include-eth`. Supported timeframes are `1m`, `5m`, `15m`, `30m`, `1h`, `4h`,
+and `1d`.
+
+Files are written under:
+
+```text
+${AURA_ROOT:-/var/aura}/market/ohlcv/{SYMBOL}/{tf}.jsonl
+${AURA_ROOT:-/var/aura}/market/meta/{SYMBOL}.json
+```
+
+Each candle line uses schema `aura.ohlcv_candle.v1`:
+
+```json
+{
+  "schema": "aura.ohlcv_candle.v1",
+  "symbol": "PF_XBTUSD",
+  "tf": "1h",
+  "ts_ms": 1724284800000,
+  "open": "100",
+  "high": "101",
+  "low": "99",
+  "close": "100.5",
+  "volume": "12.34",
+  "source": "kraken_futures_charts",
+  "ingested_at": "2026-08-22T00:00:00Z"
+}
+```
+
+Pulls upsert by `(symbol, tf, ts_ms)`, rewrite sorted JSONL, and refresh
+metadata. Repeated pulls are safe:
+
+```bash
+python3.12 -m runtime.tools.market_ingest pull --symbol PF_XBTUSD --tf 1h
+python3.12 -m runtime.tools.market_ingest status
+python3.12 -m runtime.tools.market_ingest show --symbol PF_XBTUSD --tf 1h --tail 3
+```
 
 ## Runner call pattern
 

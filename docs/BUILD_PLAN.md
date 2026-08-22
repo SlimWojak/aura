@@ -55,7 +55,8 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 Exit: CoS can request a tiny supervised paper action end-to-end with traces; cold kill drill passes.
 
 ### P2 — OHLCV spine + Ichimoku v0 (after P1 honest)
-1. Market OHLCV spine for Kraken futures-paper crypto majors; no live scopes.
+1. [x] Market OHLCV spine for Kraken futures-paper majors via public Kraken
+   Futures Charts REST; no live scopes, no strategy, no Ichimoku yet.
 2. Ichimoku v0 as the first explicit, mathematical, testable brain; **not** ICT/ATOM.
 3. Eval harness: pre-register trial → paper run → bank nulls/graves in LEDGER.
 4. Weekly kill/promote memo; CoS metrics still primary.
@@ -87,6 +88,6 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 3. [x] Cloud-agent PR: P1 risk-gate stub + JSONL writer (no strategy).
 4. [x] First supervised runner loop (still human-triggered).
 5. [x] Kill-drill CLI wiring and one-shot drill smoke.
-6. Market OHLCV spine.
+6. [x] Market OHLCV spine.
 7. Ichimoku v0.
 8. Eval harness.
