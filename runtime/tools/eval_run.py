@@ -215,6 +215,16 @@ def add_return_stats_args(parser: ArgumentParser) -> None:
         default=1,
         help="honest count of tried variants used to deflate Sharpe for this report",
     )
+    parser.add_argument(
+        "--apply-funding",
+        action="store_true",
+        help="apply stored relative funding rates to held bars in eval net returns",
+    )
+    parser.add_argument(
+        "--funding-bps",
+        type=float,
+        help="constant hourly relative funding stress in bps; requires --apply-funding",
+    )
 
 
 def dispatch(args: Namespace) -> dict[str, Any]:
@@ -242,6 +252,8 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
         fee_bps=args.fee_bps,
+        apply_funding=args.apply_funding,
+        funding_bps=args.funding_bps,
         atr_period=args.atr_period,
         trial_count=args.trial_count,
     )
@@ -273,6 +285,8 @@ def command_cartridge(args: Namespace) -> dict[str, Any]:
             max_bars=args.max_bars,
             since_ts_ms=parse_since_ts_ms(args.since),
             fee_bps=args.fee_bps,
+            apply_funding=args.apply_funding,
+            funding_bps=args.funding_bps,
             atr_period=args.atr_period,
             trial_count=args.trial_count,
             regime_tf=args.regime_tf,
@@ -289,6 +303,8 @@ def command_cartridge(args: Namespace) -> dict[str, Any]:
             max_bars=args.max_bars,
             since_ts_ms=parse_since_ts_ms(args.since),
             fee_bps=args.fee_bps,
+            apply_funding=args.apply_funding,
+            funding_bps=args.funding_bps,
             atr_period=args.atr_period,
             trial_count=args.trial_count,
             regime_tf=args.regime_tf,
@@ -389,6 +405,8 @@ def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
         "fee_bps",
         "fee_assumption",
         "fee_model",
+        "funding_path",
+        "funding_model",
         "cartridge",
         "regime_gate",
         "confirm_gate",
@@ -420,6 +438,8 @@ def oos_metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
         "fee_bps",
         "fee_assumption",
         "fee_model",
+        "funding_path",
+        "funding_model",
         "cartridge",
         "regime_gate",
         "confirm_gate",
@@ -450,6 +470,7 @@ def compact_half_report(report: Mapping[str, Any]) -> dict[str, Any]:
         "evaluated_bars",
         "min_bars",
         "fee_bps",
+        "funding_model",
         "cartridge",
         "regime_gate",
         "confirm_gate",

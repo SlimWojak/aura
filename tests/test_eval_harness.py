@@ -19,6 +19,7 @@ from runtime.eval import (
     signal_for_closed_bar,
 )
 from runtime.eval import backtest_ichimoku
+from runtime.market.funding import FUNDING_SCHEMA, FUNDING_SOURCE, funding_path, write_funding_rates
 from runtime.market.ohlcv import SOURCE, ohlcv_path, write_candles
 from runtime.regime import RegimeSnapshot, RegimeState
 from runtime.tools.eval_run import main as eval_main
@@ -1019,6 +1020,58 @@ class EvalHarnessTests(TestCase):
         self.assertIn("trades", saved)
         self.assertIn("signals", saved)
 
+    def test_backtest_cli_apply_funding_loads_stored_relative_rates(self):
+        candles = [candle(index, 100 + index) for index in range(90)]
+        write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
+        write_funding_rates(
+            funding_path("PF_XBTUSD", aura_root_override=self.aura_root),
+            [stored_funding_rate(index, "0.0001") for index in range(90)],
+        )
+
+        output = run_cli(
+            [
+                "backtest",
+                "--aura-root",
+                str(self.aura_root),
+                "--symbol",
+                "PF_XBTUSD",
+                "--tf",
+                "1h",
+                "--apply-funding",
+                "--metrics-only",
+            ]
+        )
+
+        self.assertTrue(output["ok"])
+        self.assertEqual("stored_relative_funding_rate", output["funding_model"]["source"])
+        self.assertEqual(
+            str(funding_path("PF_XBTUSD", aura_root_override=self.aura_root)),
+            output["funding_path"],
+        )
+        self.assertEqual(0, output["metrics"]["funding_missing_held_bars"])
+        self.assertIn("funding_drag_simple_return", output["metrics"])
+
+    def test_funding_bps_requires_apply_funding(self):
+        candles = [candle(index, 100 + index) for index in range(90)]
+        write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
+
+        code, output = run_cli_result(
+            [
+                "backtest",
+                "--aura-root",
+                str(self.aura_root),
+                "--symbol",
+                "PF_XBTUSD",
+                "--tf",
+                "1h",
+                "--funding-bps",
+                "1",
+            ]
+        )
+
+        self.assertEqual(1, code)
+        self.assertIn("--funding-bps requires --apply-funding", output["error"])
+
     def test_cartridge_cli_metrics_only_runs_seed_baseline(self):
         candles = [candle(index, 100 + index) for index in range(90)]
         write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
@@ -1157,6 +1210,18 @@ def candle(
         "low": str(close - 0.1),
         "close": str(close),
         "volume": "1",
+    }
+
+
+def stored_funding_rate(index: int, relative: str) -> dict[str, str | int]:
+    return {
+        "schema": FUNDING_SCHEMA,
+        "symbol": "PF_XBTUSD",
+        "ts": index * 3_600_000,
+        "funding_rate": "0",
+        "relative_funding_rate": relative,
+        "source": FUNDING_SOURCE,
+        "ingested_at": "2026-08-22T00:00:00Z",
     }
 
 

@@ -31,6 +31,38 @@ fee_points = fee_bps / 10000 * (entry_price + exit_price)
 The return layer allocates fee drag on the exit row in both simple and
 ATR-normalized units.
 
+Funding is optional and off by default. When `--apply-funding` is set, evals
+load `$AURA_ROOT/market/funding/{SYMBOL}.jsonl` and apply the stored
+`relative_funding_rate` to held bars as a return-series cashflow, not as an
+entry gate, regime gate, cartridge status change, or runner/live cashflow:
+
+```text
+signed_funding_return = -position_sign * relative_funding_rate
+funding_points = signed_funding_return * mark
+funding_atr_normalized_return = funding_points / ATR
+net_return = gross_return - fee_drag + signed_funding_return
+```
+
+The sign follows Kraken futures convention: a positive relative funding rate
+means longs pay and shorts receive. A long held through positive relative
+funding has lower net returns; a short receives the same amount. Summary
+`funding_drag_*` fields are reported as drag, so a funding benefit appears as a
+negative drag.
+
+Funding accrues on every held bar. This differs from fees, which remain
+exit-row only. Alignment is by candle open timestamp (`ts_ms`): a 1h candle uses
+the funding row labeled with that candle's open, and a 4h candle sums completed
+hourly funding labels with `ts` in `[bar_open, bar_close)`. The next hour's
+label is never used for the current bar.
+
+Stored funding coverage on dexter currently starts around 2025-08-20 while some
+OHLCV spans begin in 2023. With `--apply-funding`, missing funding on any held
+bar in the scored window fails closed with `funding_missing_held_bars=...`.
+Either use `--since` inside the stored funding span or run an explicit stress
+test with `--funding-bps`, a constant hourly relative funding assumption in bps.
+`--funding-bps` is mutually exclusive with stored rates and does not overload
+`--fee-bps`.
+
 ## Track C exit modes
 
 The cartridge eval path supports closed-bar paper exits beyond `bias_flip`:
@@ -80,6 +112,7 @@ python -m runtime.tools.eval_run cartridge \
   --symbol PF_XBTUSD \
   --tf 1h \
   --fee-bps 4 \
+  --apply-funding \
   --regime-tf 4h \
   --regime-htf 1d \
   --atr-period 14 \
@@ -96,11 +129,24 @@ python -m runtime.tools.eval_run cartridge \
   --symbol PF_ETHUSD \
   --tf 1h \
   --fee-bps 4 \
+  --apply-funding \
   --regime-tf 4h \
   --regime-htf 1d \
   --oos-split 0.7 \
   --atr-period 14 \
   --trial-count 34 \
+  --metrics-only
+```
+
+Constant hourly funding stress, without reading stored funding rates:
+
+```bash
+python -m runtime.tools.eval_run backtest \
+  --aura-root /var/aura \
+  --symbol PF_XBTUSD \
+  --tf 1h \
+  --apply-funding \
+  --funding-bps 1 \
   --metrics-only
 ```
 
