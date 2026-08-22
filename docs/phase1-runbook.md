@@ -105,7 +105,7 @@ Check before every worker touch and before any VPS bootstrap.
 ### Credentials / MCP
 - [ ] Separate vault namespace / password manager folder: `aura/`
 - [ ] Cursor MCP profile **paper** ≠ profile **live** (live does not exist until tiny-capital phase)
-- [ ] Kraken allowlist: `market`, `account`, `paper` / `futures-paper` only
+- [ ] Kraken MCP allowlist: `market`, `paper` only; futures paper is CLI-only on dexter
 - [ ] No withdraw / funding / transfer tools in any agent profile
 - [ ] No main Hyperliquid key on CoS host or VPS agent home — API wallet only later
 - [ ] Delegate seats (Claude/Codex/Kimi) inherit **paper profile only**
@@ -130,27 +130,34 @@ Check before every worker touch and before any VPS bootstrap.
 Prove CoS loop: data → decision → paper order → PnL → trace → memo, with zero capital and no Singapore Derivatives eligibility dependency.
 
 ### Exact MCP services (official `kraken-cli`)
-Pin args explicitly — **do not rely on plugin defaults** (sources disagree: some omit `futures-paper`).
+Pin args explicitly — **do not rely on plugin defaults**. In `kraken-cli` 0.4.1,
+there is no MCP service named `futures-paper`; futures paper is reached through
+the dexter CLI only.
 
 | `-s` service | Auth | Phase 1 | Notes |
 |---|---|---|---|
 | `market` | No | **Allow** | Public ticker/OHLC/book |
 | `paper` | No | **Allow** | Spot paper, local sim, live public prices |
-| `futures-paper` | No | **Allow** | Futures/perps paper, local sim — **must add explicitly** |
+| `futures-paper` | No | **Not an MCP service in 0.4.1** | Use `kraken futures paper ...` CLI on dexter |
 | `account` | Yes | **Omit** until needed | Read-only balances; not required for paper engines |
 | `workspace` / `feedback` | No | Optional later | Not required for proving loop |
 | `trade` / `futures` | Yes | **Forbid** | Live orders |
 | `funding` / `earn` / `subaccount` | Yes | **Forbid** | Withdrawals / transfers |
 | `all` | Mixed | **Forbid** | |
 
-**Pinned Phase 1 / Paper invocation:**
+**Pinned Phase 1 / Paper MCP invocation:**
 ```text
-kraken mcp -s market,paper,futures-paper
+kraken mcp -s market,paper
 ```
-Cursor MCP: `"command":"kraken"`, `"args":["mcp","-s","market,paper,futures-paper"]`.
+Cursor MCP: `"command":"kraken"`, `"args":["mcp","-s","market,paper"]`.
+
+**Pinned futures paper path:**
+```text
+kraken futures paper status|positions|buy|sell|cancel|cancel-all|...
+```
 
 ### Paper requirements
-- **No API keys, no Kraken account, no auth** for `paper` and `futures-paper`
+- **No API keys, no Kraken account, no auth** for spot `paper` or CLI futures paper
 - Local state; prices from public Spot / Futures APIs
 - Spot paper and futures paper are **independent** reset domains
 - Labels: spot `"mode":"paper"`; futures `"mode":"futures_paper"`
@@ -168,8 +175,8 @@ Cursor MCP: `"command":"kraken"`, `"args":["mcp","-s","market,paper,futures-pape
 
 ### Install gate (after this runbook is approved)
 1. Install official `kraken-cli` only (GitHub releases / Cursor marketplace `kraken-cli`); pin version in `ops/kraken_scopes.md`
-2. Start with `-s market,paper,futures-paper` only
-3. Verify `kraken --version`, public `market` read, `futures-paper` init + one supervised paper order
+2. Start MCP with `-s market,paper` only
+3. Verify `kraken --version`, public `market` read, futures paper status, and one supervised CLI paper order
 4. Freeze scope file in repo; never widen without Slim go
 5. Load shipped `AGENTS.md` / skills as worker context — still paper-only
 
@@ -350,7 +357,7 @@ MacBook today has SSH aliases only for M3/M4. Add either:
 1. Wire MacBook SSH to dexter (direct Tailscale or ProxyJump)
 2. Create `/var/aura/{market,paper,evidence,logs,scratch,secrets}` + perms
 3. (Recommended) create user `aura` + sudoers for unit control only
-4. Install pinned `kraken-cli` ARM64; MCP `-s market,paper,futures-paper` only
+4. Install pinned `kraken-cli` ARM64; MCP `-s market,paper` only; futures paper via CLI
 5. systemd: `aura-runner`, `aura-risk`, `aura-scribe`
 6. Alert email path + dead-man heartbeat
 7. Run kill drills A–C before unsupervised paper
@@ -449,8 +456,11 @@ Greenlight paper only when:
 ## Appendix A — Kraken service pin (confirmed for runbook)
 
 ```text
-# Paper-only MCP (CoS + VPS agents)
-kraken mcp -s market,paper,futures-paper
+# Paper-only MCP (CoS + dexter/cloud agents)
+kraken mcp -s market,paper
+
+# Futures paper is CLI-only on dexter in kraken-cli 0.4.1
+kraken futures paper status|positions|cancel|cancel-all
 
 # Explicitly never in Phase paper
 # trade | futures | funding | earn | subaccount | all | --allow-dangerous

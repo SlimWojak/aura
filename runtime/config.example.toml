@@ -1,0 +1,25 @@
+# Aura paper-runtime example config.
+# Copy outside git before use; do not store secrets here.
+
+aura_root = "/var/aura"
+mode = "paper"
+venue = "kraken"
+host_role = "dexter"
+
+[kraken]
+spot_mcp_services = ["market", "paper"]
+futures_paper_cli_only = true
+forbidden_services = [
+  "trade",
+  "futures",
+  "funding",
+  "earn",
+  "subaccount",
+  "all",
+]
+allow_dangerous = false
+
+[risk]
+policy_file = "RISK_POLICY.md"
+paper_only = true
+autopromote_live = false
