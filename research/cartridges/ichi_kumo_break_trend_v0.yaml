@@ -1,0 +1,41 @@
+id: ichi_kumo_break_trend_v0
+title: Kumo breakout trend-gated OOS variant
+status: draft
+thesis: Test close-through-Kumo breakout entries under the Phase 2 trend veto as a distinct entry family from cloud-bias state and always-on Ichimoku.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichi_v0_baseline
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: kumo_break
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: none
+  require_chikou_confirmation: false
+  chikou_mode: close
+exit_rules:
+  mode: flat_on_rule_fail
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 40000
+  min_trades: 15
+  must_beat_baseline: true
+  baseline_metric: total_pnl_points_after_fees
+  notes: Kill unless forced 70/30 IS and OOS halves both beat fee-on regime-gated ichi_v0_baseline on total_pnl_points_after_fees with min_trades in each half; also kill if this is a no-op versus always_on under the same veto.
+sources:
+  - docs/REGIME.md
+  - research/cartridges/ichi_v0_baseline.yaml
+  - runtime/brain/ichimoku.py
+  - runtime/eval/backtest_ichimoku.py
+notes: "Evidence path: eval_run cartridge --id ichi_kumo_break_trend_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. Long when prior close is at or below the prior Kumo top and current close breaks above the current Kumo top; short mirrors with Kumo bottom."

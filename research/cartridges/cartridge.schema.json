@@ -71,7 +71,14 @@
       ],
       "properties": {
         "mode": {
-          "enum": ["always_on", "tk_cross", "cloud_bias", "tk_cloud_bias", "kijun_bounce"]
+          "enum": [
+            "always_on",
+            "tk_cross",
+            "cloud_bias",
+            "tk_cloud_bias",
+            "kijun_bounce",
+            "kumo_break"
+          ]
         },
         "allowed_sides": {
           "type": "array",

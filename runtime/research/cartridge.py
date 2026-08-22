@@ -14,7 +14,14 @@ from typing import Any, Mapping, Sequence
 
 
 STATUS_VALUES = {"draft", "queued", "tested", "killed", "kept"}
-ENTRY_MODES = {"always_on", "tk_cross", "cloud_bias", "tk_cloud_bias", "kijun_bounce"}
+ENTRY_MODES = {
+    "always_on",
+    "tk_cross",
+    "cloud_bias",
+    "tk_cloud_bias",
+    "kijun_bounce",
+    "kumo_break",
+}
 SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
 TK_RULES = {"tenkan_over_kijun_for_long_under_for_short", "tk_cross_only", "none"}

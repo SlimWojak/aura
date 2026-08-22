@@ -21,14 +21,17 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_cloud_thickness_v0",
                 "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
+                "ichi_kumo_break_trend_v0",
                 "ichi_params_20_60_v0",
                 "ichi_params_20_60_er_v0",
+                "ichi_params_20_60_trend_v0",
                 "ichi_tk_cloud_strong_v0",
                 "ichi_tk_strong_trend_cloud_color_v0",
                 "ichi_tk_strong_trend_kijun_dip_v0",
                 "ichi_tk_strong_trend_oos_v0",
                 "ichi_tk_strong_trend_only_v0",
                 "ichi_tk_cloud_v0",
+                "ichi_tk_cross_trend_v0",
                 "ichi_v0_baseline",
             },
             {cartridge["id"] for cartridge in cartridges},
@@ -40,7 +43,7 @@ class ResearchCartridgeTests(TestCase):
                 self.assertEqual("1h", cartridge["tf"])
                 self.assertIn(
                     cartridge["baseline_ref"],
-                    {"ichimoku_v0", "ichi_tk_strong_trend_only_v0"},
+                    {"ichimoku_v0", "ichi_tk_strong_trend_only_v0", "ichi_v0_baseline"},
                 )
                 self.assertEqual({"long", "short"}, set(cartridge["entry_rules"]["allowed_sides"]))
                 self.assertIn(cartridge["entry_rules"]["chikou_mode"], {"close", "strict"})
@@ -101,6 +104,31 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("none", kijun_bounce["entry_rules"]["require_tk_state"])
         self.assertEqual("killed", kijun_bounce["status"])
         self.assertIn("docs/LEDGER.md", kijun_bounce["sources"])
+
+    def test_round_three_entry_family_cartridges_load_requested_modes(self):
+        slow_trend = load_cartridge(CARTRIDGE_ROOT / "ichi_params_20_60_trend_v0.yaml")
+        tk_cross = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_cross_trend_v0.yaml")
+        kumo_break = load_cartridge(CARTRIDGE_ROOT / "ichi_kumo_break_trend_v0.yaml")
+
+        self.assertEqual("ichi_v0_baseline", slow_trend["baseline_ref"])
+        self.assertEqual(20, slow_trend["ichimoku"]["tenkan"])
+        self.assertEqual(60, slow_trend["ichimoku"]["kijun"])
+        self.assertEqual("always_on", slow_trend["entry_rules"]["mode"])
+        self.assertTrue(slow_trend["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual("total_pnl_points_after_fees", slow_trend["kill_criteria"]["baseline_metric"])
+        self.assertIn("70/30", slow_trend["notes"])
+
+        self.assertEqual("ichi_v0_baseline", tk_cross["baseline_ref"])
+        self.assertEqual("tk_cross", tk_cross["entry_rules"]["mode"])
+        self.assertEqual("tk_cross_only", tk_cross["entry_rules"]["require_tk_state"])
+        self.assertFalse(tk_cross["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn("not both-lines-outside TK-strong", tk_cross["notes"])
+
+        self.assertEqual("ichi_v0_baseline", kumo_break["baseline_ref"])
+        self.assertEqual("kumo_break", kumo_break["entry_rules"]["mode"])
+        self.assertEqual("none", kumo_break["entry_rules"]["require_tk_state"])
+        self.assertFalse(kumo_break["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn("current close breaks above", kumo_break["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")

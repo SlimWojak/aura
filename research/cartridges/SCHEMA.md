@@ -48,7 +48,7 @@ Allowed `entry_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`. |
+| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `kumo_break`. |
 | `allowed_sides` | list[enum] | Each item is `long` or `short`. |
 | `require_close_vs_cloud` | enum | `above_for_long_below_for_short`, `outside_cloud`, `none`. |
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
@@ -57,6 +57,11 @@ Allowed `entry_rules` keys:
 | `require_kijun_dip_setup` | bool | Optional TK-strong refinement. When `true`, a bullish TK reclaim requires at least one of the prior `setup_bars` to have Tenkan <= Kijun; short mirrors with Tenkan >= Kijun. |
 | `require_cloud_color_align` | bool | Optional TK-strong refinement. When `true`, long entries require displaced Span A > Span B and short entries require Span A < Span B. |
 | `setup_bars` | integer | Optional positive lookback for setup refinements such as `require_kijun_dip_setup`. |
+
+`kumo_break` is a close-through-cloud breakout mode: long fires when the prior
+close was at or below the prior Kumo top and the current close is above the
+current Kumo top; short mirrors with the prior close at or above the prior Kumo
+bottom and the current close below the current Kumo bottom.
 
 Baseline Ichimoku v0 is represented as:
 
