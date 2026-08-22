@@ -30,6 +30,7 @@ ENTRY_MODES = {
     "kijun_bounce",
     "tenkan_bounce",
     "kumo_break",
+    "vol_di_expand_trend",
 }
 SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
@@ -92,6 +93,11 @@ ENTRY_FIELDS = {
     "require_kijun_dip_setup",
     "require_cloud_color_align",
     "setup_bars",
+    "di_period",
+    "di_spread_min",
+    "di_spread_delta_min",
+    "di_expansion_lookback",
+    "price_cloud_distance_atr_min",
 }
 REQUIRED_ENTRY_FIELDS = {
     "mode",
@@ -192,6 +198,32 @@ def validate_cartridge(
         _require_bool(entry_rules, "require_cloud_color_align", f"{label}: entry_rules")
     if "setup_bars" in entry_rules:
         _require_positive_int(entry_rules, "setup_bars", f"{label}: entry_rules")
+    if entry_rules["mode"] == "vol_di_expand_trend":
+        _require_fields(
+            entry_rules,
+            {
+                "di_period",
+                "di_spread_min",
+                "di_spread_delta_min",
+                "di_expansion_lookback",
+                "price_cloud_distance_atr_min",
+            },
+            f"{label}: entry_rules",
+        )
+    if "di_period" in entry_rules:
+        _require_positive_int(entry_rules, "di_period", f"{label}: entry_rules")
+    if "di_spread_min" in entry_rules:
+        _require_positive_number(entry_rules, "di_spread_min", f"{label}: entry_rules")
+    if "di_spread_delta_min" in entry_rules:
+        _require_nonnegative_number(entry_rules, "di_spread_delta_min", f"{label}: entry_rules")
+    if "di_expansion_lookback" in entry_rules:
+        _require_positive_int(entry_rules, "di_expansion_lookback", f"{label}: entry_rules")
+    if "price_cloud_distance_atr_min" in entry_rules:
+        _require_nonnegative_number(
+            entry_rules,
+            "price_cloud_distance_atr_min",
+            f"{label}: entry_rules",
+        )
     if "confirm_symbol" in entry_rules:
         _require_string(entry_rules, "confirm_symbol", f"{label}: entry_rules")
         if "require_confirm_same_bar" not in entry_rules:
@@ -456,6 +488,12 @@ def _require_positive_number(values: Mapping[str, Any], field: str, label: str) 
     value = values[field]
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{label}: {field} must be a positive number")
+
+
+def _require_nonnegative_number(values: Mapping[str, Any], field: str, label: str) -> None:
+    value = values[field]
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{label}: {field} must be a non-negative number")
 
 
 def _validate_phase2_ablation(value: Any, label: str) -> None:

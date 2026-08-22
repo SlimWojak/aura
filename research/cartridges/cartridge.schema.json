@@ -86,7 +86,8 @@
             "tk_cloud_bias",
             "kijun_bounce",
             "tenkan_bounce",
-            "kumo_break"
+            "kumo_break",
+            "vol_di_expand_trend"
           ]
         },
         "allowed_sides": {
@@ -129,6 +130,26 @@
         "setup_bars": {
           "type": "integer",
           "minimum": 1
+        },
+        "di_period": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "di_spread_min": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "di_spread_delta_min": {
+          "type": "number",
+          "minimum": 0
+        },
+        "di_expansion_lookback": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "price_cloud_distance_atr_min": {
+          "type": "number",
+          "minimum": 0
         }
       },
       "dependentRequired": {
