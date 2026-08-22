@@ -193,19 +193,38 @@ class EvalHarnessTests(TestCase):
         self.assertLessEqual(gated["metrics"]["trade_count"], baseline["metrics"]["trade_count"])
         self.assertIn("entry_gate", gated["signals"][0])
 
-    def test_phase2_ablation_metadata_maps_to_regime_params(self):
+    def test_omitted_phase2_ablation_uses_thin_default_spine(self):
+        cartridge = fast_cartridge(regime={"type": "none", "params": {}})
+
+        config = backtest_ichimoku._phase2_ablation_config(cartridge)
+        params = backtest_ichimoku._phase2_regime_params_from_cartridge(
+            cartridge,
+            regime_tf="4h",
+            regime_htf="1d",
+        )
+
+        self.assertFalse(config["explicit"])
+        self.assertTrue(config["enabled"])
+        self.assertEqual("default", config["label"])
+        self.assertFalse(params.use_adx_di)
+        self.assertTrue(params.use_kumo_width_atr)
+        self.assertTrue(params.use_htf_veto)
+        self.assertFalse(params.use_dwell)
+        self.assertEqual("1d", params.htf_tf)
+
+    def test_phase2_abfull_metadata_reconstructs_old_stack(self):
         cartridge = fast_cartridge(
             regime={
                 "type": "none",
                 "params": {
                     "phase2_ablation": {
                         "enabled": True,
-                        "label": "AB-noHTF",
+                        "label": "AB-FULL",
                         "components": {
                             "adx_di": True,
                             "kumo_width_atr": True,
-                            "htf_veto": False,
-                            "dwell_hysteresis": False,
+                            "htf_veto": True,
+                            "dwell_hysteresis": True,
                         },
                     }
                 },
@@ -220,9 +239,9 @@ class EvalHarnessTests(TestCase):
 
         self.assertTrue(params.use_adx_di)
         self.assertTrue(params.use_kumo_width_atr)
-        self.assertFalse(params.use_htf_veto)
-        self.assertFalse(params.use_dwell)
-        self.assertIsNone(params.htf_tf)
+        self.assertTrue(params.use_htf_veto)
+        self.assertTrue(params.use_dwell)
+        self.assertEqual("1d", params.htf_tf)
 
     def test_fee_bps_reports_after_fee_pnl_below_raw_pnl(self):
         closes = [100, 100, 100, 101, 102, 103, 104, 103, 102, 101, 100, 99, 98, 97]

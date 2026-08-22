@@ -38,10 +38,10 @@ class RegimeParams:
     flat_n: int = 8
     flat_atr_fraction: float = 0.05
     dwell_bars: int = 3
-    use_adx_di: bool = True
+    use_adx_di: bool = False
     use_kumo_width_atr: bool = True
     use_htf_veto: bool = True
-    use_dwell: bool = True
+    use_dwell: bool = False
 
     @property
     def minimum_candles(self) -> int:

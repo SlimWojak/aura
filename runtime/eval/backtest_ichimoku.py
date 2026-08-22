@@ -51,10 +51,10 @@ _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
 _TRAIL_EXIT_MODES = {"kijun_trail", "atr_stop", "chandelier_trail"}
 _SAME_BAR_ENTRY_BLOCK_EXIT_REASONS = _TRAIL_EXIT_MODES | {"time_stop"}
 _PHASE2_COMPONENT_DEFAULTS = {
-    "adx_di": True,
+    "adx_di": False,
     "kumo_width_atr": True,
     "htf_veto": True,
-    "dwell_hysteresis": True,
+    "dwell_hysteresis": False,
 }
 _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_v0",
