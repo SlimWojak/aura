@@ -8,6 +8,7 @@ Standalone **agent-native trading experiment** — disposable, isolated from con
 Phase 1 design. Pre-strategy-code. No live trading. Human (Slim) retains capital / risk / go-no-go authority.
 
 ## Docs
+- [Aura operating charter](docs/AURA_CHARTER.md) — source of truth for autonomy, brain lean, paper fence, and promotion gates
 - [Phase 0 memo](docs/phase0-memo.md) — framing (eval loop + isolation first)
 - [Phase 1 runbook](docs/phase1-runbook.md) — repo layout, fence, Kraken scopes, risk, templates, dexter bring-up, kill drills
 - [Agent operating manual](AGENTS.md) — standing seats, worker boundaries, host boundaries, paper-only rules

@@ -3,6 +3,8 @@
 Aura is a disposable, paper-first, agent-native trading experiment for
 `SlimWojak/aura`. It is not constellation, not ATOM, and not a live-trading
 surface. Agents must preserve that fence before doing anything useful.
+Autonomy and brain lean are governed by the
+[Aura operating charter](docs/AURA_CHARTER.md).
 
 ## Non-negotiables
 

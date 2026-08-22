@@ -1,6 +1,7 @@
 # Aura lean build plan
 
 Living plan for CoS (Grok Bot). Paper-first. Disposable. No constellation coupling.
+Charter source of truth: [AURA_CHARTER.md](AURA_CHARTER.md).
 
 Last updated: 2026-08-22
 
@@ -21,6 +22,8 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 - [x] Kraken CLI 0.4.1 paper; futures-paper smoke open/flat
 - [x] Kraken Cursor connector (paper-only instructions)
 - [x] Agent workplace scaffold (AGENTS.md, DISPATCH.md, Cursor fence rule, runtime stubs)
+- [x] Aura operating charter: autonomy, brain lean, paper fence, promotion gate
+- [x] Kill-drill CLI wiring and one-shot drill smoke; repeat before unsupervised paper
 
 ## Delegates on dexter (target)
 
@@ -34,7 +37,7 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 
 ## Build phases (lean)
 
-### P0 — Agent workplace ops (now → days)
+### P0 — Agent workplace ops (current)
 1. [x] Install **Claude Code CLI** on dexter (2.1.239, logged in).
 2. [x] Document Droid + Claude invoke recipes in `ops/delegates.md`.
 3. Optional: install Codex on dexter if first Claude+Droid week feels thin.
@@ -51,10 +54,11 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 
 Exit: CoS can request a tiny supervised paper action end-to-end with traces; cold kill drill passes.
 
-### P2 — First parametric family (after P1 honest)
-1. One fully parametric signal family (z/Kalman or funding-band) — **one**, not a zoo.
-2. Pre-register trial → paper run → bank nulls/graves in LEDGER.
-3. Weekly kill/promote memo; CoS metrics still primary.
+### P2 — OHLCV spine + Ichimoku v0 (after P1 honest)
+1. Market OHLCV spine for Kraken futures-paper crypto majors; no live scopes.
+2. Ichimoku v0 as the first explicit, mathematical, testable brain; **not** ICT/ATOM.
+3. Eval harness: pre-register trial → paper run → bank nulls/graves in LEDGER.
+4. Weekly kill/promote memo; CoS metrics still primary.
 
 Exit: ≥2 weekly memos with honest traces; no fence breaches.
 
@@ -80,5 +84,9 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 
 1. [x] Install Claude CLI on dexter and smoke version from SSH.
 2. [x] Add `ops/delegates.md`.
-3. Cloud-agent PR: P1 risk-gate stub + JSONL writer (no strategy).
+3. [x] Cloud-agent PR: P1 risk-gate stub + JSONL writer (no strategy).
 4. [x] First supervised runner loop (still human-triggered).
+5. [x] Kill-drill CLI wiring and one-shot drill smoke.
+6. Market OHLCV spine.
+7. Ichimoku v0.
+8. Eval harness.
