@@ -362,10 +362,15 @@ class ResearchCartridgeTests(TestCase):
         kumo_break = load_cartridge(CARTRIDGE_ROOT / "ichi_kumo_break_thin_v0.yaml")
         always_on = load_cartridge(CARTRIDGE_ROOT / "ichi_always_on_tsmom_thin_v0.yaml")
         cloud_bias = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_bias_tsmom_thin_v0.yaml")
+        expected_statuses = {
+            "ichi_kumo_break_thin_v0": "killed",
+            "ichi_always_on_tsmom_thin_v0": "kept",
+            "ichi_cloud_bias_tsmom_thin_v0": "kept",
+        }
 
         for cartridge in (kumo_break, always_on, cloud_bias):
             with self.subTest(cartridge=cartridge["id"]):
-                self.assertEqual("draft", cartridge["status"])
+                self.assertEqual(expected_statuses[cartridge["id"]], cartridge["status"])
                 self.assertEqual("PF_XBTUSD", cartridge["symbol"])
                 self.assertEqual("ichi_v0_baseline", cartridge["baseline_ref"])
                 self.assertEqual(
@@ -385,11 +390,15 @@ class ResearchCartridgeTests(TestCase):
                 )
                 self.assertIn("--regime-tf 4h --regime-htf 1d", cartridge["notes"])
                 self.assertIn("--oos-split 0.7 --atr-period 14", cartridge["notes"])
-                self.assertIn("PF_ETHUSD is secondary eval context only", cartridge["notes"])
+                self.assertIn("--trial-count 37 --metrics-only", cartridge["notes"])
+                self.assertIn("docs/LEDGER.md", cartridge["sources"])
+                self.assertIn("R7 thin-spine Intern bank", cartridge["notes"])
 
         self.assertEqual("kumo_break", kumo_break["entry_rules"]["mode"])
         self.assertEqual("none", kumo_break["entry_rules"]["require_tk_state"])
         self.assertFalse(kumo_break["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn("Killed forever", kumo_break["notes"])
+        self.assertIn("-15.91", kumo_break["notes"])
         self.assertIn(
             "Never revive ichi_kumo_break_trend_v0",
             kumo_break["kill_criteria"]["notes"],
@@ -402,14 +411,17 @@ class ResearchCartridgeTests(TestCase):
         )
         self.assertFalse(always_on["entry_rules"]["require_chikou_confirmation"])
         self.assertIn("CLI Phase-2 hard veto only", always_on["kill_criteria"]["notes"])
+        self.assertIn("not live", always_on["notes"])
+        self.assertIn("64.55", always_on["notes"])
+        self.assertIn("34.92", always_on["notes"])
 
         self.assertEqual("cloud_bias", cloud_bias["entry_rules"]["mode"])
         self.assertEqual("none", cloud_bias["entry_rules"]["require_tk_state"])
         self.assertFalse(cloud_bias["entry_rules"]["require_chikou_confirmation"])
-        self.assertIn(
-            "Kill if trade set identical to ichi_always_on_tsmom_thin_v0",
-            cloud_bias["kill_criteria"]["notes"],
-        )
+        self.assertIn("not live", cloud_bias["notes"])
+        self.assertIn("120.35", cloud_bias["notes"])
+        self.assertIn("190.88", cloud_bias["notes"])
+        self.assertIn("trades 362 versus 338", cloud_bias["kill_criteria"]["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")

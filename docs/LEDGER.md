@@ -237,3 +237,38 @@ instead of forever-killing the ablation ids.
 | Dwell/hysteresis | AB-noDwell vs AB-FULL | DROP_CANDIDATE | Removal improves OOS Calmar and DSR on both symbols: XBT DSR 0.591 vs 0.289, ETH 0.176 vs 0.037. | Bank as thinning candidate for a separate human/CoS decision. |
 | Kumo width/ATR | AB-noWidth vs AB-FULL | INCONCLUSIVE | ETH improves, while XBT DSR improves slightly and Calmar slips from 1.878 to 1.817. | Leave for further evidence; no default mutation. |
 | Full Phase-2 gate package | AB-0 vs AB-FULL | reference | AB-0 beats AB-FULL OOS Calmar and DSR on both symbols, suggesting the full gate may be net harmful as a package. | Do not promote ungated behavior to production in this PR; bank evidence only. |
+
+## 2026-08-22 R7 thin-spine Intern bake-off
+
+CoS/Curator R7 thin-spine Intern status bank for exact dexter paper rows at
+HEAD `702b6c5`, host dexter, `AURA_ROOT=/var/aura`. Rows used thin Phase-2
+defaults: HTF+width on, ADX/dwell off, with flags
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only`.
+Evidence path:
+`/var/aura/evidence/evals/r7-thin-spine-20260822/`.
+
+This section banks three R7 research ids and the same-flag thin baseline
+references only. It does not mutate `ichi_params_20_60_trend_v0`, which remains
+kept / Track A provisional-fail; it does not change runtime defaults, widen
+Kraken scopes, add live behavior, write runtime state, touch constellation/RIVER,
+or revive any killed id.
+
+Thin-spine baseline reference rows are not the Track A full-spine baseline
+rows. Track A used the full production spine and reported baseline OOS ATR
+references of XBT `0.033` and ETH `15.05`; R7 comparisons use this bank's
+HTF+width-only thin baseline rerun below.
+
+### R7 thin-spine baseline references
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_v0_baseline` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | IS: ATR total 43.74; trades 259. OOS: ATR total -7.33; trades 105. | n/a baseline ref | reference | Thin-spine same-flag baseline for R7 XBT comparisons; differs from Track A full-spine baseline. |
+| 2026-08-22 | `ichi_v0_baseline` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | IS: ATR total 133.30; trades 238. OOS: ATR total 38.02; trades 95. | n/a baseline ref | reference | Thin-spine same-flag baseline for R7 ETH comparisons; differs from Track A full-spine baseline. |
+
+### R7 cartridge dispositions
+
+| Date | Cartridge id | Symbols | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_kumo_break_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR -15.91 < thin baseline 43.74. XBT OOS ATR -1.92 > thin baseline -7.33, but IS failed the IS+OOS beat gate. ETH also failed. | false | killed | Killed forever. Do not revive `ichi_kumo_break_thin_v0` or the older killed `ichi_kumo_break_trend_v0`. |
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR 64.55 and OOS ATR 4.60 beat thin baseline 43.74 and -7.33. ETH OOS ATR 34.92 lost to thin baseline 38.02. maxDD pts OK. | true on XBT | kept | Kept provisional paper only; not live. Same BTC-primary scar pattern as prior keeps; ETH remains secondary context. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS/OOS ATR 120.35/60.65 beat thin baseline 43.74/-7.33. ETH IS/OOS ATR 190.88/97.61 beat thin baseline 133.30/38.02. Not no-op versus always_on: XBT trades 362 vs 338, overlap 78. | true | kept | Kept provisional paper only; not live. Strongest R7 candidate, but no autopromote. |

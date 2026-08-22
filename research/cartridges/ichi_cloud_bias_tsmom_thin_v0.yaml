@@ -1,6 +1,6 @@
 id: ichi_cloud_bias_tsmom_thin_v0
 title: Ichimoku cloud-bias TSMOM thin-spine v0
-status: draft
+status: kept
 thesis: Test cloud-only trend-state momentum under the thinned Phase-2 HTF+width spine without TK/chikou filters.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,8 +32,9 @@ kill_criteria:
   min_trades: 15
   must_beat_baseline: true
   baseline_metric: atr_normalized_total_return
-  notes: Thin-spine flags + forced 70/30. Beat ATR-norm of same-flag baseline IS+OOS. Count trial N. Kill if trade set identical to ichi_always_on_tsmom_thin_v0.
+  notes: "Kept provisional paper only by the 2026-08-22 R7 thin-spine Intern bank in docs/LEDGER.md; not live. Thin-spine flags + forced 70/30 had to beat same-flag ichi_v0_baseline IS+OOS on ATR-normalized total return. PF_XBTUSD IS/OOS ATR 120.35/60.65 and PF_ETHUSD IS/OOS ATR 190.88/97.61 beat the thin baselines. Not a no-op versus ichi_always_on_tsmom_thin_v0: XBT trades 362 versus 338 with overlap 78."
 sources:
+  - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/SCHEMA.md
-notes: "R7 Research Intern draft under thinned Phase-2 defaults (HTF+width; ADX/dwell off). Evidence path: eval_run cartridge --id ichi_cloud_bias_tsmom_thin_v0 --symbol PF_XBTUSD --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14. PF_ETHUSD is secondary eval context only; PF_XBTUSD remains the primary schema symbol. New id only."
+notes: "Kept provisional paper only by the 2026-08-22 R7 thin-spine Intern bank in docs/LEDGER.md; not live. Paper-only evidence from dexter at 702b6c5 with AURA_ROOT=/var/aura and flags --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only. Evidence path: /var/aura/evidence/evals/r7-thin-spine-20260822/. Thinned Phase-2 defaults were HTF+width on with ADX/dwell off. PF_XBTUSD IS ATR 120.35 and OOS ATR 60.65 beat thin baseline 43.74 and -7.33; PF_ETHUSD IS ATR 190.88 and OOS ATR 97.61 beat thin baseline 133.30 and 38.02. Not a no-op versus ichi_always_on_tsmom_thin_v0: XBT trades 362 versus 338 with overlap 78. Strongest R7 candidate; still provisional paper only, not live. PF_XBTUSD remains the primary schema symbol. New id only."
