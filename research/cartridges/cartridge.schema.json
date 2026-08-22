@@ -71,7 +71,7 @@
       ],
       "properties": {
         "mode": {
-          "enum": ["always_on", "tk_cross", "cloud_bias", "tk_cloud_bias"]
+          "enum": ["always_on", "tk_cross", "cloud_bias", "tk_cloud_bias", "kijun_bounce"]
         },
         "allowed_sides": {
           "type": "array",
@@ -152,7 +152,13 @@
           "type": "boolean"
         },
         "baseline_metric": {
-          "enum": ["total_pnl_points", "max_drawdown_points", "win_rate", "profit_factor"]
+          "enum": [
+            "total_pnl_points",
+            "total_pnl_points_after_fees",
+            "max_drawdown_points",
+            "win_rate",
+            "profit_factor"
+          ]
         },
         "notes": {
           "type": "string"

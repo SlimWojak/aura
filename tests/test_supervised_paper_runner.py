@@ -113,6 +113,34 @@ class SupervisedPaperRunnerTests(TestCase):
         self.assertEqual("allow", event["risk_gate"]["result"])
         self.assertEqual("dry_run", event["venue"]["response"]["reason"])
 
+    def test_require_regime_rejects_before_order_when_label_missing(self):
+        with patch("runtime.runner.supervised_paper.subprocess.run") as run:
+            run.side_effect = [
+                completed({"equity": 10_000, "pnl": 0, "weekly_pnl": 0}),
+                completed([]),
+            ]
+
+            result = run_supervised_order(
+                trial_id="T-regime-veto",
+                symbol="PF_XBTUSD",
+                side="buy",
+                size="0.001",
+                leverage="1",
+                client_order_id="aura-test-regime-veto",
+                notional_usd="100",
+                aura_root=self.aura_root,
+                require_regime=True,
+                kraken_bin="/tmp/kraken",
+            )
+
+        self.assertFalse(result.admission.allowed)
+        self.assertFalse(result.order_called)
+        self.assertEqual(2, run.call_count)
+        event = self.read_event("T-regime-veto")
+        self.assertIn("regime_veto", event["risk_gate"]["reasons"])
+        self.assertEqual("regime_veto", event["venue"]["response"]["reason"])
+        self.assertEqual("regime_veto", event["inputs"]["regime_gate"]["reasons"][0])
+
     def test_missing_weekly_uses_pnl_as_session_proxy(self):
         status = {"equity": "10000", "pnl": "-1.5", "positions": 0}
         positions = {"positions": []}

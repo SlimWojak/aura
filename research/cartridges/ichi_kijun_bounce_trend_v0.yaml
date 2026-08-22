@@ -1,0 +1,40 @@
+id: ichi_kijun_bounce_trend_v0
+title: Kijun bounce with Phase 2 trend veto
+status: draft
+thesis: Test whether cross-back-through-kijun pullback entries behave better when Phase 2 regime permissioning restricts entries to the matching TREND state.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichimoku_v0
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: kijun_bounce
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: none
+  require_chikou_confirmation: true
+  chikou_mode: close
+exit_rules:
+  mode: flat_on_rule_fail
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 9000
+  min_trades: 25
+  must_beat_baseline: true
+  baseline_metric: total_pnl_points_after_fees
+  notes: Kill unless fee-on Phase 2 gated results beat fee-on ichi_v0_baseline with enough trades to inspect pullback behavior.
+sources:
+  - docs/REGIME.md
+  - runtime/brain/ichimoku.py
+  - runtime/eval/backtest_ichimoku.py
+notes: Requires eval_run cartridge --regime-tf. Long entry fires when prior close is at or below prior kijun, current close crosses above kijun, current close is above kumo_top, and chikou close confirmation is positive; short mirrors below kijun and kumo_bottom. Phase 2 hard veto side-locks entries to TREND_BULL or TREND_BEAR.

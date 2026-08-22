@@ -19,6 +19,8 @@ from typing import Any, Mapping, Sequence
 
 from runtime.evidence import append_decision_event, build_decision_event, decision_jsonl_path
 from runtime.kill_state import read_kill_state_file
+from runtime.market import read_candles, validate_symbol, validate_tf
+from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
 from runtime.risk import AdmissionResult, admit
 
 
@@ -27,6 +29,8 @@ DEFAULT_SIZE = "0.001"
 DEFAULT_ORDER_TYPE = "market"
 DEFAULT_LEVERAGE = "1"
 DEFAULT_ACTOR = "cos:supervised_paper"
+DEFAULT_REGIME_TF = "4h"
+DEFAULT_REGIME_HTF = "1d"
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +83,9 @@ def run_supervised_order(
     dry_run: bool = False,
     actor: str = DEFAULT_ACTOR,
     kraken_bin: str | Path | None = None,
+    require_regime: bool = False,
+    regime_tf: str = DEFAULT_REGIME_TF,
+    regime_htf: str | None = DEFAULT_REGIME_HTF,
 ) -> SupervisedOrderResult:
     """Run one supervised paper order attempt.
 
@@ -106,6 +113,17 @@ def run_supervised_order(
     )
 
     admission = admit(proposal, account_state, now=now)
+    regime_gate = None
+    if require_regime:
+        regime_gate = latest_regime_gate(
+            symbol=symbol,
+            side=side,
+            aura_root=aura_root,
+            regime_tf=regime_tf,
+            regime_htf=regime_htf,
+        )
+        if not bool(regime_gate["allowed"]):
+            admission = _admission_with_regime_veto(admission, regime_gate)
     event = build_decision_event(
         trial_id=trial_id,
         actor=actor,
@@ -117,13 +135,15 @@ def run_supervised_order(
     event["inputs"]["account_state"] = dict(account_state)
     event["inputs"]["state_sources"] = account_payload["sources"]
     event["inputs"]["dry_run"] = dry_run
+    if regime_gate is not None:
+        event["inputs"]["regime_gate"] = regime_gate
     event["venue"]["request"] = venue_request_summary(proposal)
 
     order_called = False
     if not admission.allowed:
         event["venue"]["response"] = {
             "not_called": True,
-            "reason": "risk_gate_reject",
+            "reason": "regime_veto" if "regime_veto" in admission.reasons else "risk_gate_reject",
         }
     elif dry_run:
         event["venue"]["response"] = {
@@ -218,6 +238,142 @@ def read_paper_account_state(
         "positions": positions,
         "sources": sources,
     }
+
+
+def latest_regime_gate(
+    *,
+    symbol: str,
+    side: str,
+    aura_root: str | Path | None,
+    regime_tf: str,
+    regime_htf: str | None,
+) -> dict[str, Any]:
+    safe_symbol = validate_symbol(symbol)
+    safe_regime_tf = validate_tf(regime_tf)
+    safe_regime_htf = validate_tf(regime_htf) if regime_htf is not None else None
+    entry_side = order_side_to_entry_side(side)
+    source_candles = read_candles(safe_symbol, "1h", aura_root_override=aura_root)
+    source = {
+        "stored_tf": "1h",
+        "stored_1h_candles": len(source_candles),
+        "regime_candles": 0,
+        "htf_candles": None,
+    }
+    if not source_candles:
+        allowed, reasons = regime_allows(entry_side, None)
+        return _regime_gate_payload(
+            allowed=allowed,
+            reasons=reasons,
+            side=entry_side,
+            state=None,
+            as_of=None,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+            source=source,
+        )
+
+    try:
+        regime_candles = resample_1h_candles(source_candles, symbol=safe_symbol, target_tf=safe_regime_tf)
+        htf_candles = (
+            resample_1h_candles(source_candles, symbol=safe_symbol, target_tf=safe_regime_htf)
+            if safe_regime_htf is not None
+            else None
+        )
+    except ValueError as exc:
+        allowed, reasons = regime_allows(entry_side, None)
+        return _regime_gate_payload(
+            allowed=allowed,
+            reasons=[*reasons, f"regime_source_error:{exc}"],
+            side=entry_side,
+            state=None,
+            as_of=None,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+            source=source,
+        )
+
+    source["regime_candles"] = len(regime_candles)
+    source["htf_candles"] = len(htf_candles) if htf_candles is not None else None
+    if not regime_candles:
+        allowed, reasons = regime_allows(entry_side, None)
+        return _regime_gate_payload(
+            allowed=allowed,
+            reasons=[*reasons, f"no_complete_{safe_regime_tf}_regime_candles"],
+            side=entry_side,
+            state=None,
+            as_of=None,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+            source=source,
+        )
+
+    params = RegimeParams(regime_tf=safe_regime_tf, htf_tf=safe_regime_htf)
+    snapshots = classify_series(
+        regime_candles,
+        params=params,
+        tf=safe_regime_tf,
+        htf_candles=htf_candles,
+    )
+    snapshot = snapshots[-1] if snapshots else None
+    allowed, reasons = regime_allows(entry_side, snapshot.state if snapshot is not None else None)
+    return _regime_gate_payload(
+        allowed=allowed,
+        reasons=reasons,
+        side=entry_side,
+        state=snapshot.state.value if snapshot is not None else None,
+        as_of=snapshot.as_of if snapshot is not None else None,
+        regime_tf=safe_regime_tf,
+        regime_htf=safe_regime_htf,
+        source=source,
+    )
+
+
+def order_side_to_entry_side(side: str) -> str | None:
+    if side == "buy":
+        return "long"
+    if side == "sell":
+        return "short"
+    return None
+
+
+def _regime_gate_payload(
+    *,
+    allowed: bool,
+    reasons: Sequence[str],
+    side: str | None,
+    state: str | None,
+    as_of: int | None,
+    regime_tf: str,
+    regime_htf: str | None,
+    source: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "required": True,
+        "allowed": allowed,
+        "side": side,
+        "state": state,
+        "as_of": as_of,
+        "tf": regime_tf,
+        "htf": regime_htf,
+        "reasons": list(reasons),
+        "source": dict(source),
+    }
+
+
+def _admission_with_regime_veto(
+    admission: AdmissionResult,
+    regime_gate: Mapping[str, Any],
+) -> AdmissionResult:
+    reasons = list(admission.reasons)
+    for reason in regime_gate.get("reasons", []):
+        if reason not in reasons:
+            reasons.append(str(reason))
+    return AdmissionResult(
+        allowed=False,
+        reasons=tuple(reasons),
+        policy_version=admission.policy_version,
+        evaluated_at=admission.evaluated_at,
+    )
 
 
 def run_kraken_json(kraken_bin: str, args: Sequence[str]) -> Any:
@@ -515,6 +671,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="proposal notional for risk admission; market orders reject without it",
     )
     parser.add_argument("--dry-run", action="store_true", help="admit and write JSONL, but skip order")
+    parser.add_argument(
+        "--require-regime",
+        action="store_true",
+        help="require Phase 2 stored-OHLCV regime permission before any venue call",
+    )
+    parser.add_argument(
+        "--regime-tf",
+        default=DEFAULT_REGIME_TF,
+        help="regime timeframe resampled from stored 1h OHLCV when --require-regime is set",
+    )
+    parser.add_argument(
+        "--regime-htf",
+        default=DEFAULT_REGIME_HTF,
+        help="optional higher timeframe for regime labels; use 'none' to disable",
+    )
     parser.add_argument("--aura-root", help="override AURA_ROOT; production default is /var/aura")
     parser.add_argument("--actor", default=DEFAULT_ACTOR, help="actor label for decision JSONL")
     args = parser.parse_args(argv)
@@ -531,6 +702,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         aura_root=args.aura_root,
         dry_run=args.dry_run,
         actor=args.actor,
+        require_regime=args.require_regime,
+        regime_tf=args.regime_tf,
+        regime_htf=optional_tf(args.regime_htf),
     )
     print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
     if result.admission.allowed and (
@@ -538,6 +712,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     ):
         return 1
     return 0 if result.admission.allowed else 2
+
+
+def optional_tf(raw_value: str | None) -> str | None:
+    if raw_value is None or raw_value.strip().lower() in {"", "none", "off", "false"}:
+        return None
+    return validate_tf(raw_value)
 
 
 if __name__ == "__main__":

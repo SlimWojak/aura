@@ -122,6 +122,15 @@ def build_parser() -> ArgumentParser:
         default=0.0,
         help="optional per-side fee in basis points for 1-unit price-point accounting",
     )
+    cartridge_parser.add_argument(
+        "--regime-tf",
+        help="optional Phase 2 hard-veto regime timeframe resampled from stored 1h OHLCV",
+    )
+    cartridge_parser.add_argument(
+        "--regime-htf",
+        default="1d",
+        help="optional higher-timeframe regime veto; use 'none' to disable",
+    )
 
     ledger_parser = subparsers.add_parser("ledger", help="rebuild trial ledger summary")
     ledger_parser.add_argument("--aura-root", help="override AURA_ROOT; dexter default is /var/aura")
@@ -158,6 +167,8 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
         fee_bps=args.fee_bps,
+        regime_tf=args.regime_tf,
+        regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf)
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
@@ -267,12 +278,19 @@ def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
         "fee_assumption",
         "fee_model",
         "cartridge",
+        "regime_gate",
         "engine",
         "window",
         "metrics",
         "outputs",
     )
     return {key: report[key] for key in keys if key in report}
+
+
+def parse_optional_tf(raw_tf: str | None) -> str | None:
+    if raw_tf is None or raw_tf.strip().lower() in {"", "none", "off", "false"}:
+        return None
+    return validate_tf(raw_tf)
 
 
 if __name__ == "__main__":

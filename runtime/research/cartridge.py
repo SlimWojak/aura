@@ -14,14 +14,20 @@ from typing import Any, Mapping, Sequence
 
 
 STATUS_VALUES = {"draft", "queued", "tested", "killed", "kept"}
-ENTRY_MODES = {"always_on", "tk_cross", "cloud_bias", "tk_cloud_bias"}
+ENTRY_MODES = {"always_on", "tk_cross", "cloud_bias", "tk_cloud_bias", "kijun_bounce"}
 SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
 TK_RULES = {"tenkan_over_kijun_for_long_under_for_short", "tk_cross_only", "none"}
 CHIKOU_MODES = {"close", "strict"}
 EXIT_MODES = {"bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop"}
 REGIME_TYPES = {"adx", "er", "cloud_thickness", "none"}
-BASELINE_METRICS = {"total_pnl_points", "max_drawdown_points", "win_rate", "profit_factor"}
+BASELINE_METRICS = {
+    "total_pnl_points",
+    "total_pnl_points_after_fees",
+    "max_drawdown_points",
+    "win_rate",
+    "profit_factor",
+}
 
 TOP_LEVEL_FIELDS = {
     "id",

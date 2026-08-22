@@ -16,6 +16,7 @@ available, otherwise at bar ``t`` close.
 
 from __future__ import annotations
 
+from bisect import bisect_right
 from datetime import UTC, datetime
 from math import isfinite
 from pathlib import Path
@@ -25,6 +26,7 @@ from typing import Any, Callable, Mapping, Sequence
 from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
 from runtime.market import ohlcv_path, read_candles, validate_symbol, validate_tf
+from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
 from runtime.research.cartridge import load_cartridge, load_cartridges
 
 
@@ -45,8 +47,12 @@ CARTRIDGE_ROOT = Path(__file__).resolve().parents[2] / "research" / "cartridges"
 _DIRECTION_BY_BIAS: dict[Bias, int] = {"long": 1, "short": -1, "flat": 0}
 _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
 _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
+_PHASE2_REGIME_REQUIRED_CARTRIDGES = {
+    "ichi_tk_strong_trend_only_v0",
+    "ichi_kijun_bounce_trend_v0",
+}
 _SignalProvider = Callable[[int], IchimokuSignal]
-_EntryGateProvider = Callable[[int], Mapping[str, Any]]
+_EntryGateProvider = Callable[[int, Bias], Mapping[str, Any]]
 
 
 def run_backtest(
@@ -111,6 +117,8 @@ def run_backtest_cartridge(
     tf: str | None = None,
     min_bars: int | None = None,
     fee_bps: float = 0.0,
+    regime_tf: str | None = None,
+    regime_htf: str | None = None,
 ) -> dict[str, Any]:
     """Run a supported paper research cartridge over supplied candles."""
 
@@ -123,6 +131,12 @@ def run_backtest_cartridge(
 
     safe_symbol = validate_symbol(symbol if symbol is not None else str(cartridge["symbol"]))
     safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
+    safe_regime_tf = validate_tf(regime_tf) if regime_tf is not None else None
+    safe_regime_htf = validate_tf(regime_htf) if regime_htf is not None else None
+    if _cartridge_requires_phase2_regime(cartridge) and safe_regime_tf is None:
+        raise ValueError(
+            f"cartridge {cartridge['id']} requires --regime-tf for Phase 2 regime hard veto"
+        )
     params = _params_from_cartridge(cartridge)
     resolved_min_bars = min_bars if min_bars is not None else params.minimum_candles
     normalized = _prepare_candles(
@@ -141,7 +155,21 @@ def run_backtest_cartridge(
     allowed_sides = set(entry_rules["allowed_sides"])
     allowed_entry_sides = None if allowed_sides == {"long", "short"} else allowed_sides
     series = compute_ichimoku(normalized, params=params)
-    entry_gate_provider = _entry_gate_provider(normalized, series=series, cartridge=cartridge)
+    cartridge_gate_provider = _entry_gate_provider(normalized, series=series, cartridge=cartridge)
+    regime_gate_provider = (
+        _regime_entry_gate_provider(
+            candles,
+            symbol=safe_symbol,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+        )
+        if safe_regime_tf is not None
+        else None
+    )
+    entry_gate_provider = _combine_entry_gate_providers(
+        cartridge_gate_provider,
+        regime_gate_provider,
+    )
     signal_provider = _signal_provider_for_cartridge(series, cartridge=cartridge)
     report = _score_backtest(
         normalized,
@@ -155,14 +183,22 @@ def run_backtest_cartridge(
             "Displaced spans use past raw Ichimoku values. Chikou mode is "
             f"{chikou_mode!r}; strict mode compares current close with "
             "high/low[t-displacement]. Entry regime gates are precomputed once "
-            "and only block new entries. Execution uses next open when available, "
-            "else current close."
+            "and only block new entries. Phase 2 hard regime vetoes map the "
+            "latest regime label with as_of <= the decision bar and never freeze "
+            "exits. Execution uses next open when available, else current close."
         ),
         signal_provider=signal_provider,
         entry_gate_provider=entry_gate_provider,
         allowed_entry_sides=allowed_entry_sides,
         fee_bps=fee_bps,
     )
+    if regime_gate_provider is not None:
+        report["regime_gate"] = {
+            "enabled": True,
+            "tf": safe_regime_tf,
+            "htf": safe_regime_htf,
+            "policy": "TREND_BULL allows long only; TREND_BEAR allows short only; RANGE/VOLATILE/TRANSITION deny new entries; exits always allowed.",
+        }
     _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
     return report
 
@@ -273,7 +309,7 @@ def _score_backtest(
     for index in range(start_index, len(candles)):
         signal = signal_provider(index)
         entry_gate = (
-            _normalize_entry_gate(entry_gate_provider(index))
+            _normalize_entry_gate(entry_gate_provider(index, signal.bias))
             if entry_gate_provider is not None
             else _ALLOW_ENTRY_GATE
         )
@@ -373,6 +409,12 @@ def _score_backtest(
         "bias_counts": bias_counts,
         "final_bias": final_bias,
     }
+    if entry_gate_provider is not None or allowed_entry_sides is not None:
+        metrics["entry_gate_denied_count"] = sum(
+            1
+            for signal in signal_trace
+            if signal["bias"] != "flat" and not signal["entry_gate"]["allowed"]
+        )
     if resolved_fee_bps > 0:
         metrics["fee_bps"] = _stable_float(resolved_fee_bps)
         metrics["total_fee_points"] = _stable_float(total_fee_points)
@@ -450,6 +492,8 @@ def cartridge_backtest_from_store(
     since_ts_ms: int | None = None,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
     fee_bps: float = 0.0,
+    regime_tf: str | None = None,
+    regime_htf: str | None = None,
 ) -> dict[str, Any]:
     """Read stored OHLCV and return a supported cartridge backtest report."""
 
@@ -475,6 +519,8 @@ def cartridge_backtest_from_store(
         tf=safe_tf,
         min_bars=min_bars,
         fee_bps=fee_bps,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
@@ -541,8 +587,16 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         and regime_type == "none"
         and not bool(entry_rules["require_chikou_confirmation"])
     )
+    is_kijun_bounce = (
+        entry_mode == "kijun_bounce"
+        and require_tk_state == "none"
+        and exit_mode == "flat_on_rule_fail"
+        and regime_type == "none"
+        and bool(entry_rules["require_chikou_confirmation"])
+        and entry_rules["chikou_mode"] == "close"
+    )
 
-    if not (is_always_on or is_tk_cloud_strong):
+    if not (is_always_on or is_tk_cloud_strong or is_kijun_bounce):
         reasons.append(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
     if entry_rules["require_close_vs_cloud"] != "above_for_long_below_for_short":
         reasons.append(
@@ -559,15 +613,24 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
             "entry_rules.require_tk_state="
             f"{entry_rules['require_tk_state']!r} is not wired"
         )
+    if is_kijun_bounce and require_tk_state != "none":
+        reasons.append(
+            "entry_rules.require_tk_state="
+            f"{entry_rules['require_tk_state']!r} is not wired"
+        )
     if is_always_on and not bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
     if is_tk_cloud_strong and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
+    if is_kijun_bounce and not bool(entry_rules["require_chikou_confirmation"]):
+        reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
     if entry_rules["chikou_mode"] not in {"close", "strict"}:
         reasons.append(f"entry_rules.chikou_mode={entry_rules['chikou_mode']!r} is not wired")
     if is_always_on and exit_mode != "bias_flip":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_tk_cloud_strong and exit_mode != "flat_on_rule_fail":
+        reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
+    if is_kijun_bounce and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if not bool(exit_rules["close_on_flat"]):
         reasons.append("exit_rules.close_on_flat=false is not wired")
@@ -707,7 +770,7 @@ def _entry_gate_provider(
         threshold = _positive_float(params.get("threshold"), "regime.params.threshold")
         adx_values = compute_wilder_adx(candles, period=period)
 
-        def gate(index: int) -> Mapping[str, Any]:
+        def gate(index: int, side: Bias) -> Mapping[str, Any]:
             adx_value = adx_values[index]
             values = {"adx": _stable_float(adx_value), "period": period, "threshold": threshold}
             if adx_value is None:
@@ -723,7 +786,7 @@ def _entry_gate_provider(
         threshold = _positive_float(params.get("threshold"), "regime.params.threshold")
         er_values = compute_efficiency_ratio(candles, period=period)
 
-        def gate(index: int) -> Mapping[str, Any]:
+        def gate(index: int, side: Bias) -> Mapping[str, Any]:
             er_value = er_values[index]
             values = {"er": _stable_float(er_value), "period": period, "threshold": threshold}
             if er_value is None:
@@ -738,7 +801,7 @@ def _entry_gate_provider(
         min_pct = _positive_float(params.get("min_pct"), "regime.params.min_pct")
         thickness_values = _cloud_thickness_pct(series)
 
-        def gate(index: int) -> Mapping[str, Any]:
+        def gate(index: int, side: Bias) -> Mapping[str, Any]:
             thickness_pct = thickness_values[index]
             values = {"thickness_pct": _stable_float(thickness_pct), "min_pct": min_pct}
             if thickness_pct is None:
@@ -750,6 +813,107 @@ def _entry_gate_provider(
         return gate
     else:
         raise NotImplementedError(f"regime.type={regime_type!r} is not wired")
+
+
+def _regime_entry_gate_provider(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    symbol: str,
+    regime_tf: str,
+    regime_htf: str | None,
+) -> _EntryGateProvider:
+    regime_candles = resample_1h_candles(candles, symbol=symbol, target_tf=regime_tf)
+    htf_candles = (
+        resample_1h_candles(candles, symbol=symbol, target_tf=regime_htf)
+        if regime_htf is not None
+        else None
+    )
+    params = RegimeParams(regime_tf=regime_tf, htf_tf=regime_htf)
+    snapshots = classify_series(regime_candles, params=params, tf=regime_tf, htf_candles=htf_candles)
+    snapshot_as_of = [
+        int(snapshot.as_of)
+        for snapshot in snapshots
+        if snapshot.as_of is not None
+    ]
+    indexed_snapshots = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot.as_of is not None
+    ]
+
+    def gate(index: int, side: Bias) -> Mapping[str, Any]:
+        if side == "flat":
+            return {
+                "allowed": True,
+                "reason": "regime_not_applicable_flat_bias",
+                "values": {},
+            }
+        bar_ts_ms = _candle_ts_ms(candles[index])
+        snapshot_index = bisect_right(snapshot_as_of, bar_ts_ms) - 1
+        if snapshot_index < 0:
+            allowed, reasons = regime_allows(side, None)
+            return {
+                "allowed": allowed,
+                "reason": reasons[0],
+                "values": {
+                    "side": side,
+                    "state": None,
+                    "as_of": None,
+                    "reasons": reasons,
+                },
+            }
+
+        snapshot = indexed_snapshots[snapshot_index]
+        allowed, reasons = regime_allows(side, snapshot.state)
+        return {
+            "allowed": allowed,
+            "reason": "regime_allows" if allowed else "regime_veto",
+            "values": {
+                "side": side,
+                "state": snapshot.state.value,
+                "as_of": snapshot.as_of,
+                "tf": snapshot.tf,
+                "confidence": _stable_float(snapshot.confidence),
+                "reasons": reasons,
+            },
+        }
+
+    return gate
+
+
+def _combine_entry_gate_providers(
+    cartridge_gate_provider: _EntryGateProvider | None,
+    regime_gate_provider: _EntryGateProvider | None,
+) -> _EntryGateProvider | None:
+    if cartridge_gate_provider is None:
+        return regime_gate_provider
+    if regime_gate_provider is None:
+        return cartridge_gate_provider
+
+    def gate(index: int, side: Bias) -> Mapping[str, Any]:
+        cartridge_gate = _normalize_entry_gate(cartridge_gate_provider(index, side))
+        regime_gate = _normalize_entry_gate(regime_gate_provider(index, side))
+        if not cartridge_gate["allowed"]:
+            reason = cartridge_gate["reason"]
+        elif not regime_gate["allowed"]:
+            reason = regime_gate["reason"]
+        else:
+            reason = "entry_gates_passed"
+        return {
+            "allowed": cartridge_gate["allowed"] and regime_gate["allowed"],
+            "reason": reason,
+            "values": {
+                "cartridge_gate": cartridge_gate,
+                "regime_gate": regime_gate,
+            },
+        }
+
+    return gate
+
+
+def _cartridge_requires_phase2_regime(cartridge: Mapping[str, Any]) -> bool:
+    return str(cartridge.get("id", "")) in _PHASE2_REGIME_REQUIRED_CARTRIDGES
+
 
 def _signal_provider_for_cartridge(
     series: Any,
@@ -769,6 +933,8 @@ def _signal_provider_for_cartridge(
         and entry_rules["require_tk_state"] == "tk_cross_only"
     ):
         return lambda index: _tk_cloud_strong_signal_from_series(series, index=index)
+    if entry_rules["mode"] == "kijun_bounce":
+        return lambda index: _kijun_bounce_signal_from_series(series, index=index)
     raise NotImplementedError(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
 
 
@@ -848,6 +1014,97 @@ def _tk_cloud_strong_signal_from_series(series: Any, *, index: int) -> IchimokuS
         "senkou_span_a_displaced": span_a,
         "senkou_span_b_displaced": span_b,
         "chikou_mode": "close",
+    }
+    return IchimokuSignal(
+        ok=True,
+        reason=None,
+        bias=bias,
+        index=point.index,
+        ts_ms=point.ts_ms,
+        params=series.params,
+        components=components,
+        features=features,
+    )
+
+
+def _kijun_bounce_signal_from_series(series: Any, *, index: int) -> IchimokuSignal:
+    if not series.points:
+        return _empty_signal(series.params, "no_candles")
+    if not series.ok:
+        return _empty_signal(series.params, series.reason or "series_not_ready")
+    if index <= 0:
+        return _empty_signal(series.params, "missing_kijun_bounce_reference")
+
+    point = series.points[index]
+    previous = series.points[index - 1]
+    reference_index = point.index - series.params.displacement
+    if reference_index < 0:
+        return _empty_signal(series.params, "missing_chikou_reference")
+
+    reference_point = series.points[reference_index]
+    required_components = (
+        point.kijun,
+        point.senkou_span_a_displaced,
+        point.senkou_span_b_displaced,
+        previous.kijun,
+    )
+    if any(value is None for value in required_components):
+        return _empty_signal(series.params, "missing_ichimoku_components")
+
+    kijun = _required_float(point.kijun, "kijun")
+    previous_kijun = _required_float(previous.kijun, "previous_kijun")
+    span_a = _required_float(point.senkou_span_a_displaced, "senkou_span_a_displaced")
+    span_b = _required_float(point.senkou_span_b_displaced, "senkou_span_b_displaced")
+    cloud_top = max(span_a, span_b)
+    cloud_bottom = min(span_a, span_b)
+    close = point.close
+    previous_close = previous.close
+    reference_close = reference_point.close
+    chikou_above_reference = close > reference_close
+    chikou_below_reference = close < reference_close
+    features = {
+        "has_cloud": True,
+        "close_crossed_above_kijun": previous_close <= previous_kijun and close > kijun,
+        "close_crossed_below_kijun": previous_close >= previous_kijun and close < kijun,
+        "close_above_cloud": close > cloud_top,
+        "close_below_cloud": close < cloud_bottom,
+        "chikou_above_reference": chikou_above_reference,
+        "chikou_below_reference": chikou_below_reference,
+        "chikou_mode_close": True,
+        "chikou_mode_strict": False,
+    }
+    features["bullish_rule"] = (
+        features["close_crossed_above_kijun"]
+        and features["close_above_cloud"]
+        and features["chikou_above_reference"]
+    )
+    features["bearish_rule"] = (
+        features["close_crossed_below_kijun"]
+        and features["close_below_cloud"]
+        and features["chikou_below_reference"]
+    )
+
+    bias: Bias = "flat"
+    if features["bullish_rule"]:
+        bias = "long"
+    elif features["bearish_rule"]:
+        bias = "short"
+
+    components = {
+        "close": close,
+        "previous_close": previous_close,
+        "cloud_top": cloud_top,
+        "cloud_bottom": cloud_bottom,
+        "kijun": kijun,
+        "previous_kijun": previous_kijun,
+        "senkou_span_a_raw": point.senkou_span_a_raw,
+        "senkou_span_b_raw": point.senkou_span_b_raw,
+        "senkou_span_a_displaced": span_a,
+        "senkou_span_b_displaced": span_b,
+        "chikou_value": close,
+        "chikou_mode": "close",
+        "chikou_reference_index": reference_index,
+        "chikou_reference_close": reference_close,
     }
     return IchimokuSignal(
         ok=True,

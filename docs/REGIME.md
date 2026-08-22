@@ -1,4 +1,4 @@
-# Aura Regime Phase 1
+# Aura Regime Phase 1/2
 
 Aura Regime Phase 1 is the production permissioning spine for labeling market
 structure before any future paper runner asks Risk/Ops for admission. It is a
@@ -10,12 +10,12 @@ is [BUILD_PLAN.md](BUILD_PLAN.md).
 
 ## Non-goals
 
-- No `admit()` hard veto integration yet; that is Phase 2.
 - No entry strategy and no paper order proposal.
-- No PnL claim. Phase 1 fitness is label stability, occupancy, and flip rate.
+- No PnL claim from labels alone. Phase 1 fitness is label stability,
+  occupancy, and flip rate; Phase 2 evals remain paper-only comparisons.
 - No funding/open-interest, RSI/KAMA, parameter zoo, Pine, or live trading.
 - No Research Intern cartridge replacement. The ADX/ER/thickness cartridge
-  gates remain separate research ammo and are not wired into this module.
+  gates remain separate research ammo.
 
 ## States
 
@@ -106,3 +106,69 @@ ${AURA_ROOT:-/var/aura}/evidence/regimes/R-.../summary.json
 
 The printed summary includes occupancy percentages and flip rate. These are
 label-quality diagnostics only; they are not strategy returns.
+
+## Phase 2 hard veto
+
+Phase 2 wires regime labels into paper entry paths as a hard permissioning veto:
+
+- `TREND_BULL` allows new `long` entries only.
+- `TREND_BEAR` allows new `short` entries only.
+- `RANGE`, `VOLATILE`, and `TRANSITION` deny all new entries.
+- Missing or unknown state fails closed with `regime_veto`.
+
+The pure matrix lives in `runtime.regime.gate.regime_allows(side, state)`.
+It is for entries only. Cartridge and supervised paths still allow exits to
+follow their normal rules so positions can flatten when the regime leaves
+`TREND_*`.
+
+### Cartridge eval
+
+Cartridge eval accepts an optional Phase 2 hard-veto flag:
+
+```bash
+python3.12 -m runtime.tools.eval_run cartridge \
+  --id ichi_tk_cloud_strong_v0 \
+  --symbol PF_XBTUSD \
+  --tf 1h \
+  --metrics-only \
+  --fee-bps 4 \
+  --regime-tf 4h \
+  --regime-htf 1d
+```
+
+For each 1h decision bar, eval resamples stored 1h OHLCV into the requested
+regime timeframe, classifies labels, and maps the decision to the latest label
+with `as_of <= bar ts_ms`. The gate blocks only new long/short entries; cartridge
+exits and final flatten accounting remain unchanged.
+
+Trend-only cartridges currently require the regime flag and fail closed if it
+is omitted:
+
+- `ichi_tk_strong_trend_only_v0`
+- `ichi_kijun_bounce_trend_v0`
+
+The kijun-bounce cartridge adds a paper eval entry mode:
+
+- long when prior close was at/below prior kijun, current close crosses above
+  kijun, current close is above the displaced kumo top, and close-mode Chikou
+  confirms;
+- short mirrors below kijun and the displaced kumo bottom.
+
+### Supervised paper
+
+The human-triggered supervised runner remains unchanged by default. Operators
+can opt into the Phase 2 veto:
+
+```bash
+python3.12 -m runtime.tools.supervised_paper \
+  --trial-id T-example \
+  --side buy \
+  --client-order-id aura-example \
+  --notional-usd 100 \
+  --require-regime
+```
+
+With `--require-regime`, the runner reads stored 1h OHLCV under `AURA_ROOT`,
+computes the latest regime label, and rejects before any futures-paper venue
+call when the side is not allowed. The decision JSONL records
+`inputs.regime_gate` and a `risk_gate.reasons[]` entry of `regime_veto`.
