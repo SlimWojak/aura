@@ -357,6 +357,38 @@ Without `--i-understand-paper`, the proposal path sets `dry_run=True` and never
 submits a futures-paper order. `flat` bias is always a no-op. There is no live
 scope, no constellation import, no ICT logic, and no daemon.
 
+## Regime Phase 1 permissioning labels
+
+`runtime.regime` is Aura's production permissioning spine for market-structure
+labels. It is pure Python feature math and classification only: no order path,
+no `admit()` hard veto yet, no live Kraken scopes, no constellation coupling,
+and no entry strategy in this phase.
+
+The label set is exactly `TREND_BULL`, `TREND_BEAR`, `TRANSITION`, `RANGE`, and
+`VOLATILE`. Defaults are the classic Ichimoku 9/26/52 + 26 displacement, 4h
+regime bars resampled from stored 1h OHLCV, optional 1d HTF veto, ADX 14 with
+20/25 weak/strong thresholds, thin-cloud ATR normalization, flat-line checks,
+and 3 closed-bar dwell. Price-vs-kumo uses displaced spans under the current
+bar, never undisplaced raw spans.
+
+Label stored market data and write evidence:
+
+```bash
+python3.12 -m runtime.tools.regime_label label --symbol PF_XBTUSD --tf 4h --htf 1d
+```
+
+The command reads `${AURA_ROOT:-/var/aura}/market/ohlcv/{SYMBOL}/1h.jsonl` and
+writes:
+
+```text
+${AURA_ROOT:-/var/aura}/evidence/regimes/R-.../labels.jsonl
+${AURA_ROOT:-/var/aura}/evidence/regimes/R-.../summary.json
+```
+
+The summary reports occupancy percentages and flip rate. These are label
+stability diagnostics, not PnL or promotion evidence. Research Intern cartridges
+remain separate eval inputs and are not wired into this permissioning layer.
+
 ## Eval harness
 
 `runtime.eval` adds a thin, paper-only honesty loop around the existing

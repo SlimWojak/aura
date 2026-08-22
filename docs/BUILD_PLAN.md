@@ -72,7 +72,11 @@ Exit: CoS can request a tiny supervised paper action end-to-end with traces; col
 4. [x] Thin research cartridge queue: Research Intern thesis handoff,
    schema, seed Ichimoku variants, and loader validation. Cartridges are
    paper-only eval inputs, not runner authority.
-5. Weekly kill/promote memo; CoS metrics still primary.
+5. [x] Aura Regime Phase 1 permissioning spine: parametric Ichimoku regime
+   labels under `runtime/regime`, CLI evidence with occupancy/flip-rate
+   summary, and no entry strategy or PnL claim. Research Intern cartridges
+   remain separate research ammo.
+6. Weekly kill/promote memo; CoS metrics still primary.
 
 Exit: ≥2 weekly memos with honest traces; no fence breaches.
 
@@ -105,3 +109,4 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 7. [x] Ichimoku v0 signal/evidence path.
 8. [x] Thin eval harness backtest + ledger scorer.
 9. [x] Research cartridge queue scaffold for CoS thesis triage.
+10. [x] Regime Phase 1 permissioning labels (`docs/REGIME.md`).
