@@ -38,7 +38,7 @@ class ResearchCartridgeTests(TestCase):
         )
         for cartridge in cartridges:
             with self.subTest(cartridge=cartridge["id"]):
-                self.assertIn(cartridge["status"], {"draft", "queued", "killed"})
+                self.assertIn(cartridge["status"], {"draft", "queued", "killed", "kept"})
                 self.assertEqual("PF_XBTUSD", cartridge["symbol"])
                 self.assertEqual("1h", cartridge["tf"])
                 self.assertIn(
@@ -117,18 +117,28 @@ class ResearchCartridgeTests(TestCase):
         self.assertTrue(slow_trend["entry_rules"]["require_chikou_confirmation"])
         self.assertEqual("total_pnl_points_after_fees", slow_trend["kill_criteria"]["baseline_metric"])
         self.assertIn("70/30", slow_trend["notes"])
+        self.assertEqual("kept", slow_trend["status"])
+        self.assertIn("docs/LEDGER.md", slow_trend["sources"])
+        self.assertIn("provisional paper only", slow_trend["notes"])
+        self.assertIn("ETH secondary OOS", slow_trend["kill_criteria"]["notes"])
 
         self.assertEqual("ichi_v0_baseline", tk_cross["baseline_ref"])
         self.assertEqual("tk_cross", tk_cross["entry_rules"]["mode"])
         self.assertEqual("tk_cross_only", tk_cross["entry_rules"]["require_tk_state"])
         self.assertFalse(tk_cross["entry_rules"]["require_chikou_confirmation"])
         self.assertIn("not both-lines-outside TK-strong", tk_cross["notes"])
+        self.assertEqual("killed", tk_cross["status"])
+        self.assertIn("docs/LEDGER.md", tk_cross["sources"])
+        self.assertIn("PF_XBTUSD OOS pass_oos_gate=false", tk_cross["kill_criteria"]["notes"])
 
         self.assertEqual("ichi_v0_baseline", kumo_break["baseline_ref"])
         self.assertEqual("kumo_break", kumo_break["entry_rules"]["mode"])
         self.assertEqual("none", kumo_break["entry_rules"]["require_tk_state"])
         self.assertFalse(kumo_break["entry_rules"]["require_chikou_confirmation"])
         self.assertIn("current close breaks above", kumo_break["notes"])
+        self.assertEqual("killed", kumo_break["status"])
+        self.assertIn("docs/LEDGER.md", kumo_break["sources"])
+        self.assertIn("fee-negative OOS", kumo_break["kill_criteria"]["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")
