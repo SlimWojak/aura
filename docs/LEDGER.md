@@ -328,11 +328,10 @@ forever-killing any id. This is paper-only status hygiene: no strategy logic,
 regime defaults, live scopes, runtime state, or runner authority changes; no
 previously killed id is revived; Intern R8 remains frozen.
 
-Evidence cited from PR #34 Track A rescore:
-`/var/aura/evidence/evals/track-a-rescore-20260822/`; PR #35 R7 DSR/PBO honesty
-rescore: `/var/aura/evidence/evals/r7-dsr-pbo-20260822/`; and the R7
-thin-spine bake-off source path:
-`/var/aura/evidence/evals/r7-thin-spine-20260822/`.
+Evidence cited from Track A rescore path:
+`/var/aura/evidence/evals/track-a-rescore-20260822/`; PR #34 R7 thin-spine bank:
+`/var/aura/evidence/evals/r7-thin-spine-20260822/`; and PR #35 R7 DSR/PBO
+honesty rescore: `/var/aura/evidence/evals/r7-dsr-pbo-20260822/`.
 
 | Date | Cartridge id | Prior status | New status | Rationale |
 |---|---|---|---|---|
