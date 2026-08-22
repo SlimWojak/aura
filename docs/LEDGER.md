@@ -83,3 +83,24 @@ no regime/funding/onchain changes, and no lower-TF changes.
 | 2026-08-22 | `ichi_params_10_30_trend_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | 439e16d | dexter paper | IS: 133t; WR 0.2782; pnl_fee -39.93656; max_dd 933.6. OOS: 48t; WR 0.2708; pnl_fee +176.28136; max_dd 640.6 | false | killed | Thin BTC OOS plus ETH fail; does not displace 20/60 keep. |
 | 2026-08-22 | `ichi_tenkan_bounce_trend_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | 439e16d | dexter paper | IS: 177t; WR 0.4633; pnl_fee -3836.6032; max_dd 2659. OOS: 93t; WR 0.4409; pnl_fee -16173.126; max_dd 11705 | false | killed | Fee-on negative; distinct from kijun (282 vs 127). |
 | 2026-08-22 | `ichi_tenkan_bounce_trend_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | 439e16d | dexter paper | IS: 191t; WR 0.4974; pnl_fee -525.65524; max_dd 369.1. OOS: 84t; WR 0.4643; pnl_fee -478.87932; max_dd 538.5 | false | killed | Fee-on negative; distinct from kijun (282 vs 127). |
+
+## 2026-08-22 R5 Curator statuses
+
+Curator-confirmed R5 status bank for exact CoS dexter paper rows at HEAD
+`df9182a`. Rows used
+`--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7`.
+All rows are `tf` 1h, host dexter paper. This section banks statuses only:
+no new families, no live scopes, no constellation/RIVER, no
+regime/funding/onchain changes, and no lower-TF changes. The parent
+`ichi_params_20_60_trend_v0` remains kept.
+
+### R5 chronological OOS rows
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_timestop_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 103t; WR 0.3592; pnl_fee +20139.3588; max_dd 14252. OOS: 47t; WR 0.4681; pnl_fee +13663.2796; max_dd 11757 | false | killed | BTC IS DD >12000; OOS DD not better than parent. |
+| 2026-08-22 | `ichi_params_20_60_trend_timestop_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 96t; WR 0.3542; pnl_fee +233.8314; max_dd 1379.6. OOS: 49t; WR 0.3673; pnl_fee -212.04224; max_dd 883.5 | false | killed | ETH OOS fail. |
+| 2026-08-22 | `ichi_params_20_60_trend_long_only_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 71t; WR 0.3521; pnl_fee +13097.1364; max_dd 13353. OOS: 9t; WR 0.4444; pnl_fee +5557.8948; max_dd 6839 | false | killed | OOS trades 9 < min 10; IS DD >12000. |
+| 2026-08-22 | `ichi_params_20_60_trend_long_only_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 47t; WR 0.4255; pnl_fee +1247.10912; max_dd 762.6. OOS: 17t; WR 0.1765; pnl_fee -500.28616; max_dd 783.6 | false | killed | ETH OOS fail. |
+| 2026-08-22 | `ichi_params_20_60_trend_regime_exit_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 109t; WR 0.3761; pnl_fee +8252.8276; max_dd 15064. OOS: 54t; WR 0.4444; pnl_fee -1552.9392; max_dd 12340 | false | killed | BTC OOS fee-negative and DD >12000. |
+| 2026-08-22 | `ichi_params_20_60_trend_regime_exit_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 95t; WR 0.4; pnl_fee +85.35216; max_dd 1204.1. OOS: 47t; WR 0.3617; pnl_fee -468.23276; max_dd 860.0 | false | killed | ETH fail. |
