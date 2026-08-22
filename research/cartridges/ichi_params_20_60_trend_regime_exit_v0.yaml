@@ -1,6 +1,6 @@
 id: ichi_params_20_60_trend_regime_exit_v0
 title: Ichimoku 20 60 trend-gated regime-exit retest
-status: draft
+status: killed
 thesis: Test whether flattening as soon as the Phase 2 trend label no longer permits the open side reduces BTC OOS drawdown and repairs ETH OOS for the provisional 20/60/120/60 keep.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,11 +32,11 @@ kill_criteria:
   min_trades: 12
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless forced 70/30 fee-on Phase 2 regime-gated BTC IS and OOS beat ichi_v0_baseline on total_pnl_points_after_fees, ETH OOS beats ETH regime-gated baseline, and BTC OOS max_dd_points is <= 12000 and improves versus the provisional parent keep drawdown near 11757.
+  notes: Killed by the 2026-08-22 R5 Curator status bank in docs/LEDGER.md; PF_XBTUSD OOS pass_oos_gate=false with OOS pnl_fee -1552.9392 and OOS max_dd 12340 > 12000, and PF_ETHUSD OOS pass_oos_gate=false with OOS pnl_fee -468.23276.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "R5 Research Intern draft only; does not mutate the provisional keep. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 on both sides. exit_rules.mode=regime_exit means entries still require TREND through the Phase 2 CLI gate, and open positions flatten when the Phase 2 label leaves the matching trend: long exits when no longer TREND_BULL; short exits when no longer TREND_BEAR. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_regime_exit_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. Must improve BTC OOS max_dd versus parent around 11757; ETH OOS beat required."
+notes: "Killed by the 2026-08-22 R5 Curator status bank in docs/LEDGER.md; does not mutate the provisional parent keep. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 on both sides. exit_rules.mode=regime_exit means entries still require TREND through the Phase 2 CLI gate, and open positions flatten when the Phase 2 label leaves the matching trend: long exits when no longer TREND_BULL; short exits when no longer TREND_BEAR. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_regime_exit_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. PF_XBTUSD OOS pass_oos_gate=false: IS 109t WR 0.3761 pnl_fee +8252.8276 max_dd 15064; OOS 54t WR 0.4444 pnl_fee -1552.9392 max_dd 12340. PF_ETHUSD OOS pass_oos_gate=false: IS 95t WR 0.4 pnl_fee +85.35216 max_dd 1204.1; OOS 47t WR 0.3617 pnl_fee -468.23276 max_dd 860.0. Kill: BTC OOS fee-negative and DD >12000; ETH fail."

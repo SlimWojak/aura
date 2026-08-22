@@ -1,6 +1,6 @@
 id: ichi_params_20_60_trend_long_only_v0
 title: Ichimoku 20 60 trend-gated long-only retest
-status: draft
+status: killed
 thesis: Test whether removing short exposure from the provisional 20/60/120/60 Phase 2 trend keep improves ETH OOS behavior and caps BTC OOS drawdown without changing the kept parent.
 symbol: PF_XBTUSD
 tf: 1h
@@ -31,11 +31,11 @@ kill_criteria:
   min_trades: 10
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless forced 70/30 fee-on Phase 2 regime-gated BTC IS and OOS beat ichi_v0_baseline on total_pnl_points_after_fees, ETH OOS beats ETH regime-gated baseline, and BTC OOS max_dd_points is <= 12000.
+  notes: Killed by the 2026-08-22 R5 Curator status bank in docs/LEDGER.md; PF_XBTUSD OOS pass_oos_gate=false with only 9 OOS trades < min 10 and IS max_dd 13353 > 12000, and PF_ETHUSD OOS pass_oos_gate=false with OOS pnl_fee -500.28616.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "R5 Research Intern draft only; does not mutate the provisional keep. Same always_on 20/60/120/60 parameters as ichi_params_20_60_trend_v0, but entry_rules.allowed_sides restricts the cartridge to long only. Long only when TREND_BULL: Phase 2 CLI already side-locks entries, and this cartridge also restricts sides. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_long_only_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. ETH OOS beat required; BTC OOS max_dd <= 12000."
+notes: "Killed by the 2026-08-22 R5 Curator status bank in docs/LEDGER.md; does not mutate the provisional parent keep. Same always_on 20/60/120/60 parameters as ichi_params_20_60_trend_v0, but entry_rules.allowed_sides restricts the cartridge to long only. Long only when TREND_BULL: Phase 2 CLI already side-locks entries, and this cartridge also restricts sides. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_long_only_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. PF_XBTUSD OOS pass_oos_gate=false: IS 71t WR 0.3521 pnl_fee +13097.1364 max_dd 13353; OOS 9t WR 0.4444 pnl_fee +5557.8948 max_dd 6839. PF_ETHUSD OOS pass_oos_gate=false: IS 47t WR 0.4255 pnl_fee +1247.10912 max_dd 762.6; OOS 17t WR 0.1765 pnl_fee -500.28616 max_dd 783.6. Kill: OOS trades 9 < min 10; IS DD >12000; ETH OOS fail."
