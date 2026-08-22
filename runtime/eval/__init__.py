@@ -5,6 +5,7 @@ from runtime.eval.backtest_ichimoku import (
     BACKTEST_TRADE_SCHEMA,
     backtest_from_store,
     run_backtest,
+    run_backtest_reference,
     signal_for_closed_bar,
     write_report,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "TRIAL_LEDGER_SCHEMA",
     "backtest_from_store",
     "run_backtest",
+    "run_backtest_reference",
     "score_trials",
     "signal_for_closed_bar",
     "write_report",

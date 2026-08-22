@@ -369,6 +369,30 @@ Backtest stored OHLCV and write an evidence report:
 python3.12 -m runtime.tools.eval_run backtest --symbol PF_XBTUSD --tf 1h
 ```
 
+Full multi-year 1h stores are supported. The backtest computes the Ichimoku
+series once, then walks indexed signals/trades over that precomputed series
+instead of recomputing indicator history at every bar. For long histories,
+`--metrics-only` keeps stdout compact while still writing the full `report.json`
+and `trades.jsonl` artifacts:
+
+```bash
+python3.12 -m runtime.tools.eval_run backtest \
+  --symbol PF_XBTUSD \
+  --tf 1h \
+  --metrics-only
+```
+
+Windowed runs are available for quick checks:
+
+```bash
+python3.12 -m runtime.tools.eval_run backtest \
+  --symbol PF_XBTUSD \
+  --tf 1h \
+  --since 2023-05-01T00:00:00Z \
+  --max-bars 720 \
+  --metrics-only
+```
+
 The command reads:
 
 ```text
@@ -382,9 +406,9 @@ ${AURA_ROOT:-/var/aura}/evidence/evals/E-ichi-.../report.json
 ${AURA_ROOT:-/var/aura}/evidence/evals/E-ichi-.../trades.jsonl
 ```
 
-The report schema is `aura.backtest_report.v1`. Signals are recomputed at each
-historical bar from `candles[:index+1]` only. Ichimoku displacement follows the
-brain implementation: cloud spans at the evaluated bar use past raw values, and
+The report schema is `aura.backtest_report.v1`. Signals are indexed from one
+precomputed Ichimoku series. Ichimoku displacement follows the brain
+implementation: cloud spans at the evaluated bar use past raw values, and
 Chikou compares the current close with `close[t-26]`. The naive execution model
 then applies the decided bias at the next bar open when available, otherwise the
 current close.

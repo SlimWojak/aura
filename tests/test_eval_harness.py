@@ -7,9 +7,11 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest import TestCase
+from unittest.mock import patch
 
 from runtime.brain.types import IchimokuParams
-from runtime.eval import run_backtest, signal_for_closed_bar
+from runtime.eval import run_backtest, run_backtest_reference, signal_for_closed_bar
+from runtime.eval import backtest_ichimoku
 from runtime.market.ohlcv import SOURCE, ohlcv_path, write_candles
 from runtime.tools.eval_run import main as eval_main
 
@@ -41,6 +43,44 @@ class EvalHarnessTests(TestCase):
         self.assertIn("flat", [signal["bias"] for signal in report["signals"]])
         self.assertIn("short", [signal["bias"] for signal in report["signals"]])
         self.assertEqual("next_open", report["trades"][0]["entry_basis"])
+
+    def test_fast_backtest_matches_reference_metrics_trades_and_signals(self):
+        closes = [
+            100 + ((index % 16) - 8) + (index * 0.03)
+            for index in range(96)
+        ]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+
+        fast = run_backtest(candles, symbol="PF_XBTUSD", tf="1h", params=FAST_PARAMS)
+        reference = run_backtest_reference(
+            candles,
+            symbol="PF_XBTUSD",
+            tf="1h",
+            params=FAST_PARAMS,
+        )
+
+        self.assertEqual("precomputed_ichimoku_series_v1", fast["engine"])
+        self.assertEqual("reference_slice_recompute_v1", reference["engine"])
+        self.assertEqual(reference["metrics"], fast["metrics"])
+        self.assertEqual(reference["trades"], fast["trades"])
+        self.assertEqual(reference["signals"], fast["signals"])
+
+    def test_fast_backtest_computes_ichimoku_once_for_large_series(self):
+        candles = [
+            candle(index, 100 + ((index % 48) - 24) * 0.25)
+            for index in range(6_000)
+        ]
+
+        with patch.object(
+            backtest_ichimoku,
+            "compute_ichimoku",
+            wraps=backtest_ichimoku.compute_ichimoku,
+        ) as wrapped_compute:
+            report = run_backtest(candles, symbol="PF_XBTUSD", tf="1h", params=FAST_PARAMS)
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(1, wrapped_compute.call_count)
+        self.assertEqual(6_000 - FAST_PARAMS.minimum_candles + 1, report["evaluated_bars"])
 
     def test_signal_for_closed_bar_ignores_future_candle_mutation(self):
         candles = [candle(index, 100 + index) for index in range(12)]
@@ -75,6 +115,38 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(trades_path.exists())
         saved = json.loads(report_path.read_text(encoding="utf-8"))
         self.assertEqual(output["eval_id"], saved["eval_id"])
+
+    def test_backtest_cli_metrics_only_keeps_stdout_compact_and_windows(self):
+        candles = [candle(index, 100 + index) for index in range(120)]
+        write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
+
+        output = run_cli(
+            [
+                "backtest",
+                "--aura-root",
+                str(self.aura_root),
+                "--symbol",
+                "PF_XBTUSD",
+                "--tf",
+                "1h",
+                "--since",
+                "1970-01-01T10:00:00Z",
+                "--max-bars",
+                "80",
+                "--metrics-only",
+            ]
+        )
+
+        self.assertTrue(output["ok"])
+        self.assertEqual(120, output["source_candle_count"])
+        self.assertEqual(80, output["candle_count"])
+        self.assertEqual(40 * 3_600_000, output["window"]["first_ts_ms"])
+        self.assertIn("metrics", output)
+        self.assertNotIn("trades", output)
+        self.assertNotIn("signals", output)
+        saved = json.loads(Path(output["outputs"]["report_json"]).read_text(encoding="utf-8"))
+        self.assertIn("trades", saved)
+        self.assertIn("signals", saved)
 
     def test_ledger_summarizes_temp_evidence_dir(self):
         trial_root = self.aura_root / "evidence" / "trials" / "T-ledger"
