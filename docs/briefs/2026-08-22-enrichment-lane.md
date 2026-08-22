@@ -96,3 +96,31 @@ The output uses the existing IC-screen contract: forward ATR-normalized returns,
 Newey-West/HAC CIs for overlapping horizons, Benjamini-Hochberg q-values, and
 the same two-symbol kill summary. It does not mutate cartridges, unlock Intern,
 revive killed ids, or change Track A.
+
+## Run result
+
+Paper-only dexter run banked in `docs/LEDGER.md` at main tip `86d4ca2`.
+Evidence path:
+`/var/aura/evidence/evals/ic-screen-enrichment-20260822/` (`report.json`,
+`scores.csv`, `SUMMARY.md`, `run.log`). The command used
+`--feature-set enrichment` and output id `ic-screen-enrichment-20260822`.
+
+Dead on the both-symbol CI-span-zero rule:
+
+- `chikou_clears_daily_dr`
+- `chikou_daily_dr_clearance_atr`
+- `daily_fvg_distance_atr`
+- `daily_fvg_price_inside`
+
+Both-symbol survivors, candidate only:
+
+- `daily_dr_side`
+- `daily_dr_position`
+- `fvg_flat_spanb_overlap`
+- `daily_fvg_side`
+
+The survivor BH q-values remain high at about `0.19` to `0.24`; none clear BH
+`0.05`. The rank-1 Chikou x Daily DR thesis is IC-dead and should not receive
+new cartridge work. Intern remains frozen, Track A is not loosened, and the next
+draft should prefer the thin Daily FVG/flat-Span-B overlap confirm/veto under
+the frozen TREND_* spine.

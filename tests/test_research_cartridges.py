@@ -67,6 +67,7 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_v0_trend_kijun_trail_v0",
                 "ichi_v0_baseline",
                 "vol_di_expand_trend_v0",
+                "enrich_fvg_flat_spanb_trend_v0",
             },
             {cartridge["id"] for cartridge in cartridges},
         )
@@ -481,6 +482,30 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("507d840", cartridge["notes"])
         self.assertIn("Intern remains frozen", cartridge["notes"])
         self.assertIn("no 15m follow-on", cartridge["notes"])
+
+    def test_enrichment_fvg_flat_spanb_trend_draft_loads_requested_contract(self):
+        cartridge = load_cartridge(CARTRIDGE_ROOT / "enrich_fvg_flat_spanb_trend_v0.yaml")
+
+        self.assertEqual("draft", cartridge["status"])
+        self.assertEqual("PF_XBTUSD", cartridge["symbol"])
+        self.assertEqual("1h", cartridge["tf"])
+        self.assertEqual("ichi_cloud_bias_tsmom_thin_v0", cartridge["baseline_ref"])
+        self.assertEqual("enrich_fvg_flat_spanb_trend", cartridge["entry_rules"]["mode"])
+        self.assertEqual("none", cartridge["entry_rules"]["require_close_vs_cloud"])
+        self.assertEqual("none", cartridge["entry_rules"]["require_tk_state"])
+        self.assertFalse(cartridge["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual(8, cartridge["entry_rules"]["flat_spanb_bars_min"])
+        self.assertTrue(cartridge["entry_rules"]["require_fvg_side_align"])
+        self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
+        self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
+        self.assertEqual(
+            "atr_normalized_total_return",
+            cartridge["kill_criteria"]["baseline_metric"],
+        )
+        self.assertIn("both PF_XBTUSD and PF_ETHUSD or die", cartridge["kill_criteria"]["notes"])
+        self.assertIn("Do not use IC-dead Chikou Daily DR", cartridge["kill_criteria"]["notes"])
+        self.assertIn("86d4ca2", cartridge["notes"])
+        self.assertIn("no Intern unlock", cartridge["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")

@@ -59,7 +59,7 @@ Allowed `entry_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `tenkan_bounce`, `kumo_break`, `vol_di_expand_trend`. |
+| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `tenkan_bounce`, `kumo_break`, `vol_di_expand_trend`, `enrich_fvg_flat_spanb_trend`. |
 | `allowed_sides` | list[enum] | Each item is `long` or `short`. |
 | `require_close_vs_cloud` | enum | `above_for_long_below_for_short`, `outside_cloud`, `none`. |
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
@@ -75,6 +75,8 @@ Allowed `entry_rules` keys:
 | `di_spread_delta_min` | number | Required for `vol_di_expand_trend`; minimum absolute DI-spread increase over `di_expansion_lookback`. |
 | `di_expansion_lookback` | integer | Required for `vol_di_expand_trend`; lookback for the squeeze-to-release crossing. |
 | `price_cloud_distance_atr_min` | number | Required for `vol_di_expand_trend`; optional minimum ATR distance outside the Kumo in the current TREND direction. Use `0` for just outside. |
+| `flat_spanb_bars_min` | integer | Required for `enrich_fvg_flat_spanb_trend`; minimum flat displaced Span B run length before the daily FVG overlap can confirm the TREND side. |
+| `require_fvg_side_align` | bool | Required for `enrich_fvg_flat_spanb_trend`; when `true`, bullish daily FVG confirms `TREND_BULL` longs and bearish daily FVG confirms `TREND_BEAR` shorts. |
 
 `kumo_break` is a close-through-cloud breakout mode: long fires when the prior
 close was at or below the prior Kumo top and the current close is above the
@@ -122,6 +124,15 @@ labels are flat. New entries require absolute DI spread to cross
 spread stays released and price remains outside the Kumo in the TREND direction,
 so the standard `bias_flip` exit can flatten on compression, cloud loss, or
 regime leave. This mode must not use Tenkan/Kijun/TK-spread as an entry trigger.
+
+`enrich_fvg_flat_spanb_trend` is a post-enrichment draft mode. Bias side comes
+only from the active Phase 2 label (`TREND_BULL` -> long, `TREND_BEAR` -> short);
+non-`TREND_*` labels are flat. The latest confirmed daily FVG must overlap the
+lookahead-safe displaced flat Span B for at least `flat_spanb_bars_min` bars. When
+`require_fvg_side_align` is true, bullish FVGs confirm long TREND_BULL bias and
+bearish FVGs confirm short TREND_BEAR bias. It requires stored 1h candles for the
+daily FVG alignment and does not use Chikou, Daily DR, Tenkan, Kijun, or
+TK-spread as a primary trigger.
 
 ## Exit rule vocabulary
 

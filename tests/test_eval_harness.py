@@ -1063,6 +1063,84 @@ class EvalHarnessTests(TestCase):
         self.assertEqual(0, report["metrics"]["bias_counts"]["long"])
         self.assertTrue(all(signal["bias"] == "flat" for signal in report["signals"]))
 
+    def test_enrich_fvg_flat_spanb_trend_enters_on_trend_overlap(self):
+        candles = fvg_flat_spanb_candles(overlap=True)
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.TREND_BULL),
+        ):
+            report = run_backtest_cartridge(
+                candles,
+                cartridge=enrich_fvg_flat_spanb_trend_cartridge(),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertGreater(report["metrics"]["trade_count"], 0)
+        long_signals = [
+            signal
+            for signal in report["signals"]
+            if signal["bias"] == "long" and signal["features"]["fvg_flat_spanb_overlap"]
+        ]
+        self.assertTrue(long_signals)
+        first_long = long_signals[0]
+        self.assertEqual("TREND_BULL", first_long["components"]["regime_state"])
+        self.assertEqual("bullish", first_long["components"]["daily_fvg_side"])
+        self.assertEqual("long", first_long["components"]["trend_side"])
+        self.assertGreaterEqual(
+            first_long["components"]["flat_spanb_bars"],
+            first_long["components"]["flat_spanb_bars_min"],
+        )
+        self.assertTrue(first_long["features"]["fvg_side_align"])
+        self.assertFalse(first_long["features"]["tk_filter_enabled"])
+        self.assertNotIn("tenkan", first_long["components"])
+
+    def test_enrich_fvg_flat_spanb_trend_stays_flat_in_range_despite_overlap(self):
+        candles = fvg_flat_spanb_candles(overlap=True)
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.RANGE),
+        ):
+            report = run_backtest_cartridge(
+                candles,
+                cartridge=enrich_fvg_flat_spanb_trend_cartridge(),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertEqual(0, report["metrics"]["trade_count"])
+        self.assertEqual(0, report["metrics"]["bias_counts"]["long"])
+        self.assertTrue(all(signal["bias"] == "flat" for signal in report["signals"]))
+
+    def test_enrich_fvg_flat_spanb_trend_stays_flat_without_overlap(self):
+        candles = fvg_flat_spanb_candles(overlap=False)
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.TREND_BULL),
+        ):
+            report = run_backtest_cartridge(
+                candles,
+                cartridge=enrich_fvg_flat_spanb_trend_cartridge(),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertEqual(0, report["metrics"]["trade_count"])
+        self.assertEqual(0, report["metrics"]["bias_counts"]["long"])
+        self.assertTrue(all(signal["bias"] == "flat" for signal in report["signals"]))
+
     def test_kijun_bounce_cartridge_detects_cross_back_entry(self):
         closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
         report = run_backtest_cartridge(
@@ -1665,6 +1743,26 @@ def vol_di_expand_trend_cartridge() -> dict:
     return cartridge
 
 
+def enrich_fvg_flat_spanb_trend_cartridge() -> dict:
+    cartridge = fast_cartridge(
+        regime={"type": "none", "params": {}},
+        baseline_ref="ichi_cloud_bias_tsmom_thin_v0",
+        entry_rules={
+            "mode": "enrich_fvg_flat_spanb_trend",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "none",
+            "require_tk_state": "none",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+            "flat_spanb_bars_min": 8,
+            "require_fvg_side_align": True,
+        },
+    )
+    cartridge["id"] = "enrich_fvg_flat_spanb_trend_v0"
+    cartridge["kill_criteria"]["baseline_metric"] = "atr_normalized_total_return"
+    return cartridge
+
+
 def kijun_bounce_cartridge() -> dict:
     return fast_cartridge(
         regime={"type": "none", "params": {}},
@@ -1713,6 +1811,20 @@ def di_expansion_candles() -> list[dict[str, str | int]]:
             open_=close,
             high=close + (8 if index >= 8 else 1),
             low=close - 1,
+            close=close,
+        )
+        for index, close in enumerate(closes)
+    ]
+
+
+def fvg_flat_spanb_candles(*, overlap: bool) -> list[dict[str, str | int]]:
+    closes = ([100] * 24) + ([101] * 24) + ([103] * 48 if overlap else [100] * 48)
+    return [
+        candle_ohlc(
+            index,
+            open_=close,
+            high=close,
+            low=close,
             close=close,
         )
         for index, close in enumerate(closes)

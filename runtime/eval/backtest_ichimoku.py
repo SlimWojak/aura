@@ -36,6 +36,8 @@ from runtime.regime import (
     regime_allows,
     resample_1h_candles,
 )
+from runtime.regime.enrichment import align_latest_fvg, flat_spanb_overlaps_fvg
+from runtime.regime.features import flat_run_bars
 from runtime.research.cartridge import load_cartridge, load_cartridges
 
 
@@ -99,6 +101,7 @@ _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_v0_trend_chandelier_v0",
     "ichi_v0_trend_kijun_trail_v0",
     "vol_di_expand_trend_v0",
+    "enrich_fvg_flat_spanb_trend_v0",
 }
 _SignalProvider = Callable[[int], IchimokuSignal]
 _EntryGateProvider = Callable[[int, Bias], Mapping[str, Any]]
@@ -285,6 +288,9 @@ def run_backtest_cartridge(
         series,
         cartridge=cartridge,
         candles=normalized,
+        source_candles=candles,
+        symbol=safe_symbol,
+        tf=safe_tf,
         regime_snapshot_provider=regime_snapshot_provider,
     )
     report = _score_backtest(
@@ -1269,6 +1275,14 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         and not bool(entry_rules["require_chikou_confirmation"])
         and entry_rules["chikou_mode"] == "close"
     )
+    is_enrich_fvg_flat_spanb_trend = (
+        entry_mode == "enrich_fvg_flat_spanb_trend"
+        and require_tk_state == "none"
+        and exit_mode == "bias_flip"
+        and regime_type == "none"
+        and not bool(entry_rules["require_chikou_confirmation"])
+        and entry_rules["chikou_mode"] == "close"
+    )
 
     if not (
         is_always_on
@@ -1279,9 +1293,16 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         or is_kijun_bounce
         or is_tenkan_bounce
         or is_vol_di_expand_trend
+        or is_enrich_fvg_flat_spanb_trend
     ):
         reasons.append(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
-    if entry_rules["require_close_vs_cloud"] != "above_for_long_below_for_short":
+    if is_enrich_fvg_flat_spanb_trend:
+        if entry_rules["require_close_vs_cloud"] != "none":
+            reasons.append(
+                "entry_rules.require_close_vs_cloud="
+                f"{entry_rules['require_close_vs_cloud']!r} is not wired"
+            )
+    elif entry_rules["require_close_vs_cloud"] != "above_for_long_below_for_short":
         reasons.append(
             "entry_rules.require_close_vs_cloud="
             f"{entry_rules['require_close_vs_cloud']!r} is not wired"
@@ -1326,6 +1347,11 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
             "entry_rules.require_tk_state="
             f"{entry_rules['require_tk_state']!r} is not wired"
         )
+    if is_enrich_fvg_flat_spanb_trend and require_tk_state != "none":
+        reasons.append(
+            "entry_rules.require_tk_state="
+            f"{entry_rules['require_tk_state']!r} is not wired"
+        )
     if is_tk_cloud_strong and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if is_plain_tk_cross and bool(entry_rules["require_chikou_confirmation"]):
@@ -1339,6 +1365,8 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     if is_tenkan_bounce and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if is_vol_di_expand_trend and bool(entry_rules["require_chikou_confirmation"]):
+        reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
+    if is_enrich_fvg_flat_spanb_trend and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if entry_rules["chikou_mode"] not in {"close", "strict"}:
         reasons.append(f"entry_rules.chikou_mode={entry_rules['chikou_mode']!r} is not wired")
@@ -1366,6 +1394,8 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         reasons.append("TK-strong refinement entry flags are only wired for tk_cloud_bias")
     if is_vol_di_expand_trend:
         reasons.extend(_unsupported_di_expansion_reasons(entry_rules))
+    if is_enrich_fvg_flat_spanb_trend:
+        reasons.extend(_unsupported_fvg_flat_spanb_reasons(entry_rules, cartridge=cartridge))
     if is_always_on and exit_mode not in {
         "bias_flip",
         "time_stop",
@@ -1388,6 +1418,8 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     if is_tenkan_bounce and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_vol_di_expand_trend and exit_mode != "bias_flip":
+        reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
+    if is_enrich_fvg_flat_spanb_trend and exit_mode != "bias_flip":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if exit_mode not in _TRAIL_EXIT_MODES and not bool(exit_rules["close_on_flat"]):
         reasons.append("exit_rules.close_on_flat=false is not wired")
@@ -1634,6 +1666,41 @@ def _unsupported_di_expansion_reasons(entry_rules: Mapping[str, Any]) -> list[st
     except ValueError as exc:
         reasons.append(str(exc))
     return reasons
+
+
+def _unsupported_fvg_flat_spanb_reasons(
+    entry_rules: Mapping[str, Any],
+    *,
+    cartridge: Mapping[str, Any],
+) -> list[str]:
+    reasons = []
+    if cartridge.get("tf") != "1h":
+        reasons.append("entry_rules.mode='enrich_fvg_flat_spanb_trend' requires tf='1h'")
+    for field_name in ("flat_spanb_bars_min", "require_fvg_side_align"):
+        if field_name not in entry_rules:
+            reasons.append(
+                f"entry_rules.{field_name} is required for enrich_fvg_flat_spanb_trend"
+            )
+    if reasons:
+        return reasons
+    try:
+        _fvg_flat_spanb_config(entry_rules)
+    except ValueError as exc:
+        reasons.append(str(exc))
+    return reasons
+
+
+def _fvg_flat_spanb_config(entry_rules: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "flat_spanb_bars_min": _positive_int(
+            entry_rules.get("flat_spanb_bars_min"),
+            "entry_rules.flat_spanb_bars_min",
+        ),
+        "require_fvg_side_align": _required_bool(
+            entry_rules.get("require_fvg_side_align"),
+            "entry_rules.require_fvg_side_align",
+        ),
+    }
 
 
 def _di_expansion_gate_values(
@@ -2484,6 +2551,9 @@ def _signal_provider_for_cartridge(
     *,
     cartridge: Mapping[str, Any],
     candles: Sequence[Mapping[str, float | int | None]] | None = None,
+    source_candles: Sequence[Mapping[str, Any]] | None = None,
+    symbol: str | None = None,
+    tf: str | None = None,
     regime_snapshot_provider: _RegimeSnapshotProvider | None = None,
 ) -> _SignalProvider:
     entry_rules = _mapping(cartridge, "entry_rules")
@@ -2544,6 +2614,37 @@ def _signal_provider_for_cartridge(
             index=index,
             di_config=di_config,
             directional=directional,
+            regime_snapshot_provider=regime_snapshot_provider,
+        )
+    if entry_rules["mode"] == "enrich_fvg_flat_spanb_trend":
+        if candles is None or regime_snapshot_provider is None:
+            raise ValueError(
+                "entry_rules.mode='enrich_fvg_flat_spanb_trend' requires Phase 2 regime snapshots"
+            )
+        if symbol is None or tf is None:
+            raise ValueError("entry_rules.mode='enrich_fvg_flat_spanb_trend' requires symbol and tf")
+        config = _fvg_flat_spanb_config(entry_rules)
+        flat_spanb_bars = _flat_spanb_bars_from_series(
+            candles,
+            series=series,
+            max_bars=int(config["flat_spanb_bars_min"]),
+        )
+        if source_candles is None:
+            raise ValueError(
+                "entry_rules.mode='enrich_fvg_flat_spanb_trend' requires stored source candles"
+            )
+        daily_fvgs = align_latest_fvg(
+            source_candles,
+            symbol=symbol,
+            source_tf=tf,
+            target_tf="1d",
+        )
+        return lambda index: _enrich_fvg_flat_spanb_trend_signal_from_series(
+            series,
+            index=index,
+            config=config,
+            flat_spanb_bars=flat_spanb_bars,
+            daily_fvgs=daily_fvgs,
             regime_snapshot_provider=regime_snapshot_provider,
         )
     raise NotImplementedError(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
@@ -2787,6 +2888,110 @@ def _vol_di_expand_trend_signal_from_series(
         components=components,
         features=features,
     )
+
+
+def _flat_spanb_bars_from_series(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    series: Any,
+    max_bars: int,
+) -> list[int]:
+    directional = compute_directional_movement(candles, period=DEFAULT_ATR_PERIOD)
+    span_b = [point.senkou_span_b_displaced for point in series.points]
+    return [
+        flat_run_bars(
+            span_b,
+            directional.atr,
+            index=index,
+            max_bars=max_bars,
+            atr_fraction=RegimeParams().flat_atr_fraction,
+        )
+        for index in range(len(candles))
+    ]
+
+
+def _enrich_fvg_flat_spanb_trend_signal_from_series(
+    series: Any,
+    *,
+    index: int,
+    config: Mapping[str, Any],
+    flat_spanb_bars: Sequence[int],
+    daily_fvgs: Sequence[Any],
+    regime_snapshot_provider: _RegimeSnapshotProvider,
+) -> IchimokuSignal:
+    if not series.points:
+        return _empty_signal(series.params, "no_candles")
+    if not series.ok:
+        return _empty_signal(series.params, series.reason or "series_not_ready")
+
+    point = series.points[index]
+    if point.senkou_span_b_displaced is None:
+        return _empty_signal(series.params, "missing_ichimoku_components")
+
+    flat_n = int(config["flat_spanb_bars_min"])
+    require_fvg_side_align = bool(config["require_fvg_side_align"])
+    snapshot = regime_snapshot_provider(index)
+    trend_side = _trend_side_from_snapshot(snapshot)
+    daily_fvg = daily_fvgs[index]
+    fvg_side = None if daily_fvg is None else daily_fvg.side
+    flat_bars = flat_spanb_bars[index]
+    overlap = flat_spanb_overlaps_fvg(
+        span_b=point.senkou_span_b_displaced,
+        flat_spanb_bars=flat_bars,
+        flat_n=flat_n,
+        gap=daily_fvg,
+    )
+    fvg_side_align = _fvg_side_confirms_trend(fvg_side, trend_side)
+    fvg_confirmed = overlap and (fvg_side_align or not require_fvg_side_align)
+
+    features = {
+        "tk_filter_enabled": False,
+        "chikou_filter_enabled": False,
+        "trend_side_available": trend_side in {"long", "short"},
+        "daily_fvg_available": daily_fvg is not None,
+        "fvg_flat_spanb_overlap": overlap,
+        "fvg_side_align": fvg_side_align,
+        "bullish_rule": trend_side == "long" and fvg_confirmed,
+        "bearish_rule": trend_side == "short" and fvg_confirmed,
+    }
+    bias: Bias = "flat"
+    if features["bullish_rule"]:
+        bias = "long"
+    elif features["bearish_rule"]:
+        bias = "short"
+
+    components = {
+        "close": point.close,
+        "senkou_span_b_displaced": point.senkou_span_b_displaced,
+        "flat_spanb_bars": flat_bars,
+        "flat_spanb_bars_min": flat_n,
+        "daily_fvg_side": fvg_side,
+        "daily_fvg_lower": None if daily_fvg is None else daily_fvg.lower,
+        "daily_fvg_upper": None if daily_fvg is None else daily_fvg.upper,
+        "daily_fvg_detected_ts_ms": None if daily_fvg is None else daily_fvg.detected_ts_ms,
+        "require_fvg_side_align": require_fvg_side_align,
+        "regime_state": None if snapshot is None else snapshot.state.value,
+        "trend_side": trend_side,
+        "chikou_mode": "close",
+    }
+    return IchimokuSignal(
+        ok=True,
+        reason=None,
+        bias=bias,
+        index=point.index,
+        ts_ms=point.ts_ms,
+        params=series.params,
+        components=components,
+        features=features,
+    )
+
+
+def _fvg_side_confirms_trend(fvg_side: Any, trend_side: Bias) -> bool:
+    if trend_side == "long":
+        return fvg_side == "bullish"
+    if trend_side == "short":
+        return fvg_side == "bearish"
+    return False
 
 
 def _tk_cloud_strong_signal_from_series(
