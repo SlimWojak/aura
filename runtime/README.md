@@ -292,6 +292,71 @@ Without `--i-understand-paper`, the proposal path sets `dry_run=True` and never
 submits a futures-paper order. `flat` bias is always a no-op. There is no live
 scope, no constellation import, no ICT logic, and no daemon.
 
+## Eval harness
+
+`runtime.eval` adds a thin, paper-only honesty loop around the existing
+Ichimoku v0 brain. It does not place orders, call Kraken private APIs, install
+systemd units, import constellation, or rewrite strategy math.
+
+Backtest stored OHLCV and write an evidence report:
+
+```bash
+python3.12 -m runtime.tools.eval_run backtest --symbol PF_XBTUSD --tf 1h
+```
+
+The command reads:
+
+```text
+${AURA_ROOT:-/var/aura}/market/ohlcv/{SYMBOL}/{tf}.jsonl
+```
+
+and writes:
+
+```text
+${AURA_ROOT:-/var/aura}/evidence/evals/E-ichi-.../report.json
+${AURA_ROOT:-/var/aura}/evidence/evals/E-ichi-.../trades.jsonl
+```
+
+The report schema is `aura.backtest_report.v1`. Signals are recomputed at each
+historical bar from `candles[:index+1]` only. Ichimoku displacement follows the
+brain implementation: cloud spans at the evaluated bar use past raw values, and
+Chikou compares the current close with `close[t-26]`. The naive execution model
+then applies the decided bias at the next bar open when available, otherwise the
+current close.
+
+Position model v0 is intentionally dumb:
+
+- one position at a time;
+- long/short bias enters one unit at next open;
+- flat or opposite bias exits at next open;
+- reversal exits and re-enters at the same execution price;
+- any remaining open position is closed at the final close for accounting;
+- PnL is price-point delta only, with `fee_assumption=0`, no leverage, and no
+  slippage.
+
+Metrics include trade count, win rate, total PnL points, max drawdown points,
+time in market, bias counts, and final bias. This naive backtest is not evidence
+of an edge. It is a falsifiable scorecard for CoS kill/keep decisions; promotion
+still requires human review.
+
+Rebuild the trial ledger:
+
+```bash
+python3.12 -m runtime.tools.eval_run ledger
+```
+
+The ledger scorer scans
+`${AURA_ROOT:-/var/aura}/evidence/trials/*/decision.jsonl`, summarizes counts by
+schema, intent, signal bias, and risk-gate result, then writes:
+
+```text
+${AURA_ROOT:-/var/aura}/evidence/ledger/summary.json
+```
+
+It does not invent PnL from paper fills. It reports fill-price counts and only
+reports realized paper PnL when events carry explicit numeric
+`pnl_delta_paper`.
+
 ## Runner call pattern
 
 Before any supervised futures-paper CLI order, CoS/delegates should do the
