@@ -1,0 +1,42 @@
+id: ichi_params_20_60_trend_regime_exit_v0
+title: Ichimoku 20 60 trend-gated regime-exit retest
+status: draft
+thesis: Test whether flattening as soon as the Phase 2 trend label no longer permits the open side reduces BTC OOS drawdown and repairs ETH OOS for the provisional 20/60/120/60 keep.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichi_v0_baseline
+ichimoku:
+  tenkan: 20
+  kijun: 60
+  senkou_b: 120
+  displacement: 60
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+  chikou_mode: close
+exit_rules:
+  mode: regime_exit
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 12000
+  min_trades: 12
+  must_beat_baseline: true
+  baseline_metric: total_pnl_points_after_fees
+  notes: Kill unless forced 70/30 fee-on Phase 2 regime-gated BTC IS and OOS beat ichi_v0_baseline on total_pnl_points_after_fees, ETH OOS beats ETH regime-gated baseline, and BTC OOS max_dd_points is <= 12000 and improves versus the provisional parent keep drawdown near 11757.
+sources:
+  - docs/LEDGER.md
+  - docs/REGIME.md
+  - research/cartridges/ichi_params_20_60_trend_v0.yaml
+  - research/cartridges/ichi_v0_baseline.yaml
+  - runtime/eval/backtest_ichimoku.py
+notes: "R5 Research Intern draft only; does not mutate the provisional keep. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 on both sides. exit_rules.mode=regime_exit means entries still require TREND through the Phase 2 CLI gate, and open positions flatten when the Phase 2 label leaves the matching trend: long exits when no longer TREND_BULL; short exits when no longer TREND_BEAR. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_regime_exit_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. Must improve BTC OOS max_dd versus parent around 11757; ETH OOS beat required."

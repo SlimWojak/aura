@@ -27,7 +27,7 @@ SIDES = {"long", "short"}
 CLOUD_RULES = {"above_for_long_below_for_short", "outside_cloud", "none"}
 TK_RULES = {"tenkan_over_kijun_for_long_under_for_short", "tk_cross_only", "none"}
 CHIKOU_MODES = {"close", "strict"}
-EXIT_MODES = {"bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop"}
+EXIT_MODES = {"bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop", "regime_exit"}
 REGIME_TYPES = {"adx", "er", "cloud_thickness", "none"}
 BASELINE_METRICS = {
     "total_pnl_points",
