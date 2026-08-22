@@ -201,6 +201,12 @@ earns its place only when removing it materially worsens ATR Calmar or DSR on
 both PF_XBTUSD and PF_ETHUSD versus AB-FULL. Count every ablation cartridge
 toward honest trial N even if a later memo only highlights a subset.
 
+Banked Phase-2 ablation results live in
+[LEDGER.md](LEDGER.md#2026-08-22-phase-2-regime-ablation-bake-off). That bank is
+evidence-only: it does not change production `RegimeParams` defaults, promote
+ungated behavior, or mutate the provisional paper keep for
+`ichi_params_20_60_trend_v0`.
+
 ### Supervised paper
 
 The human-triggered supervised runner remains unchanged by default. Operators
