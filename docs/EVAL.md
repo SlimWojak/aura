@@ -141,6 +141,25 @@ Kill rule in the summary: a feature is dead when every usable CI for both
 PF_XBTUSD and PF_ETHUSD spans 0. Survivors are only later bake-off candidates;
 the IC screen does not mutate cartridge YAML, unlock Intern, or loosen Track A.
 
+Enrichment-lane candidates are scored with the same harness by selecting the
+registered enrichment feature bank:
+
+```bash
+python -m runtime.tools.eval_run ic-screen \
+  --aura-root /var/aura \
+  --symbols PF_XBTUSD,PF_ETHUSD \
+  --tf 1h \
+  --horizons 4,12,24,48 \
+  --atr-period 14 \
+  --feature-set enrichment \
+  --output-id ic-screen-enrichment-20260822
+```
+
+The enrichment bank is Aura-native and reads stored OHLCV only. It adds
+lookahead-safe Daily DR, Daily FVG, Chikou-vs-Daily-DR, and Daily-FVG/flat-Span-B
+overlap features as pre-registered in
+`docs/briefs/2026-08-22-enrichment-lane.md`.
+
 Single cartridge eval with return stats and DSR trial count:
 
 ```bash

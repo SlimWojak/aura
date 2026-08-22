@@ -419,6 +419,23 @@ Newey-West/HAC CIs, and Benjamini-Hochberg q-values are reported across emitted
 feature tests. It is a paper-only filter; it does not place orders, change
 cartridge status, unlock Intern, or weaken Track A.
 
+The locked enrichment lane uses the same command with an explicit feature bank:
+
+```bash
+python3.12 -m runtime.tools.eval_run ic-screen \
+  --symbols PF_XBTUSD,PF_ETHUSD \
+  --tf 1h \
+  --horizons 4,12,24,48 \
+  --atr-period 14 \
+  --feature-set enrichment \
+  --output-id ic-screen-enrichment-20260822
+```
+
+`--feature-set enrichment` scores Aura-native Daily DR, Daily FVG,
+Chikou-vs-Daily-DR, and Daily-FVG/flat-Span-B features from stored OHLCV only.
+The definitions are pre-registered in
+`docs/briefs/2026-08-22-enrichment-lane.md`.
+
 Full multi-year 1h stores are supported. The backtest computes the Ichimoku
 series once, then walks indexed signals/trades over that precomputed series
 instead of recomputing indicator history at every bar. For long histories,

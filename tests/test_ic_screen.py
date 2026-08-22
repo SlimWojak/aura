@@ -117,6 +117,47 @@ class IcScreenTests(TestCase):
         self.assertIn("paper-only", summary_path.read_text(encoding="utf-8"))
         self.assertIn("feature", scores_path.read_text(encoding="utf-8").splitlines()[0])
 
+    def test_ic_screen_cli_accepts_enrichment_feature_set(self):
+        write_candles(
+            ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root),
+            [candle(index, 100 + index * 0.1 + ((index % 24) - 12) * 0.03) for index in range(200)],
+        )
+        write_candles(
+            ohlcv_path("PF_ETHUSD", "1h", aura_root_override=self.aura_root),
+            [
+                candle(index, 200 + index * 0.08 + ((index % 18) - 9) * 0.02, symbol="PF_ETHUSD")
+                for index in range(200)
+            ],
+        )
+
+        output = run_cli(
+            [
+                "ic-screen",
+                "--aura-root",
+                str(self.aura_root),
+                "--symbols",
+                "PF_XBTUSD,PF_ETHUSD",
+                "--tf",
+                "1h",
+                "--horizons",
+                "4",
+                "--min-count",
+                "3",
+                "--feature-set",
+                "enrichment",
+                "--output-id",
+                "ic-screen-enrichment-test",
+            ]
+        )
+
+        self.assertTrue(output["ok"])
+        self.assertEqual("enrichment", output["feature_set"])
+        saved = json.loads(Path(output["outputs"]["report_json"]).read_text(encoding="utf-8"))
+        features = {row["feature"] for row in saved["scores"]}
+        self.assertIn("daily_dr_side", features)
+        self.assertIn("chikou_clears_daily_dr", features)
+        self.assertIn("fvg_flat_spanb_overlap", features)
+
 
 def candle(index: int, close: int | float, *, symbol: str = "PF_XBTUSD") -> dict[str, str | int]:
     return {
