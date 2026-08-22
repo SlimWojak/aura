@@ -15,7 +15,7 @@ Default venue context:
 |---|---:|---:|---|
 | `id` | string | yes | Stable snake_case id matching the file stem when possible. |
 | `title` | string | yes | Human-readable short title. |
-| `status` | enum | yes | `draft`, `queued`, `tested`, `killed`, or `kept`. |
+| `status` | enum | yes | `draft`, `queued`, `tested`, `killed`, `kept`, `champion_control`, or `scarred_control`. |
 | `thesis` | string | yes | One short paragraph describing the hypothesis. |
 | `symbol` | string | yes | Default `PF_XBTUSD`; other Kraken futures-paper symbols require CoS review. |
 | `tf` | string | yes | Default `1h`; should match stored OHLCV timeframes. |
@@ -27,6 +27,17 @@ Default venue context:
 | `kill_criteria` | object | yes | Numeric gates and baseline comparison flags; see below. |
 | `sources` | list[string] | yes | URLs or repo-local docs that motivated the thesis. |
 | `notes` | string | no | Extra implementation/backtest notes. |
+
+## Status vocabulary
+
+- `draft`, `queued`, and `tested` track pre-disposition paper research state.
+- `killed` records a failed cartridge that must not be revived under the same id.
+- `kept` records a provisional paper keep. It does not authorize live trading or
+  runner promotion.
+- `champion_control` records the best residual paper control after a later
+  honesty pass. It is a benchmark/control, not a runner and not live authority.
+- `scarred_control` records a paper control with known scars after a later
+  honesty pass. It is not a runner, not live authority, and not a forever-kill.
 
 ## Ichimoku parameters
 

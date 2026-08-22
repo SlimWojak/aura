@@ -13,7 +13,15 @@ import re
 from typing import Any, Mapping, Sequence
 
 
-STATUS_VALUES = {"draft", "queued", "tested", "killed", "kept"}
+STATUS_VALUES = {
+    "draft",
+    "queued",
+    "tested",
+    "killed",
+    "kept",
+    "champion_control",
+    "scarred_control",
+}
 ENTRY_MODES = {
     "always_on",
     "tk_cross",

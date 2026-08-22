@@ -320,3 +320,21 @@ beats baseline ATR on BOTH symbols`. CoS/Curator disposition is
 **provisional-fail** for both `kept` R7 TSMOM cartridges. The cartridge YAML
 statuses remain provisional paper `kept`; no forever-kill decision is made, no
 live behavior is added, and no killed id is revived.
+
+## 2026-08-22 status hygiene demotion bank
+
+Fable+Grok lateral review closes the misleading provisional `kept` labels without
+forever-killing any id. This is paper-only status hygiene: no strategy logic,
+regime defaults, live scopes, runtime state, or runner authority changes; no
+previously killed id is revived; Intern R8 remains frozen.
+
+Evidence cited from Track A rescore path:
+`/var/aura/evidence/evals/track-a-rescore-20260822/`; PR #34 R7 thin-spine bank:
+`/var/aura/evidence/evals/r7-thin-spine-20260822/`; and PR #35 R7 DSR/PBO
+honesty rescore: `/var/aura/evidence/evals/r7-dsr-pbo-20260822/`.
+
+| Date | Cartridge id | Prior status | New status | Rationale |
+|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_v0` | kept | scarred_control | Track A/R7 honesty makes the old keep a provisional-fail: BTC residual evidence remains useful as a control, but ETH, drawdown, DSR/PBO, and both-symbol baseline gates do not support runner status. |
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | kept | scarred_control | R7 BTC-primary residual passed, but ETH lost to the thin baseline and PR #35 honesty still failed; retain as a scarred paper control only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | kept | champion_control | Best residual R7 ATR control: XBT and ETH beat thin baselines, but PR #35 honesty still failed, so this remains a benchmark/control only, not a runner and not live. |

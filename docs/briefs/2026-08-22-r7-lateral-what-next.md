@@ -26,11 +26,14 @@ Exits: timestop, regime_exit, kijun_trail, ATR stop, chandelier — all killed v
 
 Honesty: Track A ATR-norm + DSR/PBO/CSCV.
 
-## Survivors (scarred kept YAML)
+## Controls after status hygiene
 
-1. `ichi_params_20_60_trend_v0` — kept provisional paper; Track A provisional-fail (N_honest=34). BTC OOS ATR can beat baseline; ETH fails; DSR ~0.15; PBO fails strict <0.10.
-2. `ichi_always_on_tsmom_thin_v0` — kept; R7 bake-off provisional keep then honesty provisional-fail (N=37). BTC beats thin baseline OOS ATR; ETH loses; DSR tiny (~0.02).
-3. `ichi_cloud_bias_tsmom_thin_v0` — kept; strongest residual ATR (beats thin baseline BTC+ETH OOS ATR; BTC DSR ~0.34, ETH DSR ~0.73) but still Track A provisional-fail; ETH PBO 0.34 / Mixed 0.13 fail.
+1. `ichi_params_20_60_trend_v0` — `scarred_control`; Track A provisional-fail (N_honest=34). BTC OOS ATR can beat baseline; ETH fails; DSR ~0.15; PBO fails strict <0.10.
+2. `ichi_always_on_tsmom_thin_v0` — `scarred_control`; R7 bake-off provisional keep then honesty provisional-fail (N=37). BTC beats thin baseline OOS ATR; ETH loses; DSR tiny (~0.02).
+3. `ichi_cloud_bias_tsmom_thin_v0` — `champion_control`; strongest residual ATR (beats thin baseline BTC+ETH OOS ATR; BTC DSR ~0.34, ETH DSR ~0.73) but still Track A provisional-fail; ETH PBO 0.34 / Mixed 0.13 fail.
+
+Sequence is locked as paper-only control hygiene: no runner promotion, no live
+scope, no revive, and Intern R8 remains frozen.
 
 Killed forever (non-exhaustive but important): TK-strong family, kumo_break (full+thin), most R3–R6 polish, all Track C exits.
 

@@ -1,6 +1,6 @@
 id: ichi_params_20_60_trend_v0
 title: Ichimoku 20 60 trend-gated OOS variant
-status: kept
+status: scarred_control
 thesis: Re-test the slower 20/60/120/60 Ichimoku parameter family under the Phase 2 trend veto to see whether reduced whipsaw survives a fee-on chronological IS/OOS split.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,11 +32,11 @@ kill_criteria:
   min_trades: 12
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kept provisional paper only by the 2026-08-22 R3 bank in docs/LEDGER.md; PF_XBTUSD OOS passed, but ETH secondary OOS failed and DD was large, so this is not live.
+  notes: Demoted to scarred_control by the 2026-08-22 status hygiene bank in docs/LEDGER.md; Track A/R7 honesty made the provisional keep misleading. PF_XBTUSD OOS passed under the old gate, but ETH secondary OOS failed, drawdown was large, and Track A marked the cartridge provisional-fail. Paper control only, not a runner, not live, and not a forever-kill.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "Kept provisional paper only after the 2026-08-22 R3 Curator status bank in docs/LEDGER.md; not live. Evidence path: eval_run cartridge --id ichi_params_20_60_trend_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 for forced 70/30 OOS. PF_XBTUSD OOS pass_oos_gate=true with OOS pnl_fee +13287.2384; PF_ETHUSD secondary OOS pass_oos_gate=false with OOS pnl_fee -107.77412; DD large. Compare only against fee-on regime-gated ichi_v0_baseline on both chronological halves; do not compare against or revive TK-strong killed parents."
+notes: "Demoted to scarred_control by the 2026-08-22 status hygiene bank in docs/LEDGER.md; Track A/R7 honesty made the provisional keep misleading. Original R3 evidence path: eval_run cartridge --id ichi_params_20_60_trend_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 for forced 70/30 OOS. Track A rescore evidence path: /var/aura/evidence/evals/track-a-rescore-20260822/. PF_XBTUSD OOS pass_oos_gate=true with OOS pnl_fee +13287.2384 under the old gate, but PF_ETHUSD secondary OOS pass_oos_gate=false with OOS pnl_fee -107.77412 and DD was large. Track A marked provisional-fail: DSR/PBO honesty plus both-symbol baseline comparison did not pass. Paper control only, not a runner, not live, and not a forever-kill. Compare only against fee-on regime-gated ichi_v0_baseline on both chronological halves; do not compare against or revive TK-strong killed parents."

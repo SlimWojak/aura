@@ -52,7 +52,10 @@ machine-readable handoff between the Research Intern and CoS.
 5. **Ledger kill/keep**
    - Results are recorded in the eval/trial ledger with the cartridge id,
      baseline reference, and a short kill/keep rationale.
-   - Status changes to `tested`, then `killed` or `kept`.
+   - Status changes to `tested`, then `killed`, `kept`,
+     `champion_control`, or `scarred_control`.
+   - Control statuses are non-runner ledger controls. They do not authorize live
+     trading, promote paper runners, or revive killed ids.
 
 ## Boundaries
 
