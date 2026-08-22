@@ -13,12 +13,16 @@ from typing import Any, Mapping, Sequence
 from runtime.eval import (
     DEFAULT_ATR_PERIOD,
     DEFAULT_CSCV_GROUPS,
+    DEFAULT_SCREEN_HORIZONS,
+    DEFAULT_SCREEN_SYMBOLS,
     backtest_from_store,
     cartridge_backtest_from_store,
     cartridge_oos_backtest_from_store,
     runnable_cartridge_ids,
+    run_ic_screen_from_store,
     score_trial_matrix,
     score_trials,
+    write_ic_screen_outputs,
     write_report,
     write_summary,
 )
@@ -193,6 +197,48 @@ def build_parser() -> ArgumentParser:
         help="optional group-level embargo after OOS groups",
     )
 
+    ic_parser = subparsers.add_parser(
+        "ic-screen",
+        help="screen bar-level Ichimoku/regime features against forward ATR returns",
+    )
+    ic_parser.add_argument("--aura-root", help="override AURA_ROOT; dexter default is /var/aura")
+    ic_parser.add_argument(
+        "--symbols",
+        default=",".join(DEFAULT_SCREEN_SYMBOLS),
+        help="comma-separated futures-paper symbols; default PF_XBTUSD,PF_ETHUSD",
+    )
+    ic_parser.add_argument("--tf", default=DEFAULT_TFS[0], help="stored OHLCV timeframe; default 1h")
+    ic_parser.add_argument(
+        "--horizons",
+        default=",".join(str(horizon) for horizon in DEFAULT_SCREEN_HORIZONS),
+        help="comma-separated forward bar horizons; default 4,12,24,48",
+    )
+    ic_parser.add_argument(
+        "--atr-period",
+        type=int,
+        default=DEFAULT_ATR_PERIOD,
+        help="Wilder ATR period for forward-return normalization",
+    )
+    ic_parser.add_argument(
+        "--min-count",
+        type=int,
+        default=20,
+        help="minimum observations for one feature/level/horizon score",
+    )
+    ic_parser.add_argument(
+        "--max-bars",
+        type=int,
+        help="score at most the latest N stored candles after --since filtering",
+    )
+    ic_parser.add_argument(
+        "--since",
+        help="score candles at or after ISO time, unix seconds, or unix milliseconds",
+    )
+    ic_parser.add_argument(
+        "--output-id",
+        help="evidence directory name under evidence/evals; default ic-screen-YYYYMMDD",
+    )
+
     return parser
 
 
@@ -237,6 +283,8 @@ def dispatch(args: Namespace) -> dict[str, Any]:
             return command_ledger(args)
         case "matrix":
             return command_matrix(args)
+        case "ic-screen":
+            return command_ic_screen(args)
         case _:
             raise ValueError(f"unknown command: {args.command}")
 
@@ -344,6 +392,45 @@ def command_matrix(args: Namespace) -> dict[str, Any]:
     )
 
 
+def command_ic_screen(args: Namespace) -> dict[str, Any]:
+    tf = validate_tf(args.tf)
+    symbols = parse_symbols(args.symbols)
+    horizons = parse_horizons(args.horizons)
+    report = run_ic_screen_from_store(
+        symbols=symbols,
+        tf=tf,
+        aura_root=args.aura_root,
+        horizons=horizons,
+        atr_period=args.atr_period,
+        min_count=args.min_count,
+        max_bars=args.max_bars,
+        since_ts_ms=parse_since_ts_ms(args.since),
+    )
+    output_id = args.output_id or f"ic-screen-{datetime.now(tz=UTC).strftime('%Y%m%d')}"
+    output_dir = evidence_root(args.aura_root) / "evals" / output_id
+    report["eval_id"] = output_id
+    report["outputs"] = {
+        "report_json": str(output_dir / "report.json"),
+        "scores_csv": str(output_dir / "scores.csv"),
+        "summary_md": str(output_dir / "SUMMARY.md"),
+    }
+    report["outputs"] = write_ic_screen_outputs(report, output_dir)
+    return {
+        "schema": report["schema"],
+        "ok": report["ok"],
+        "generated_at": report["generated_at"],
+        "eval_id": report["eval_id"],
+        "symbols": report["symbols"],
+        "tf": report["tf"],
+        "horizons": report["horizons"],
+        "atr_period": report["atr_period"],
+        "min_count": report["min_count"],
+        "scores_count": len(report["scores"]),
+        "kill_summary": report["kill_summary"],
+        "outputs": report["outputs"],
+    }
+
+
 def evidence_root(aura_root: str | Path | None) -> Path:
     root = Path(aura_root) if aura_root is not None else Path(os.environ.get("AURA_ROOT", str(DEFAULT_AURA_ROOT)))
     return root / "evidence"
@@ -381,6 +468,23 @@ def parse_since_ts_ms(raw_since: str | None) -> int | None:
     if value > Decimal("100000000000"):
         return int(value)
     return int(value * 1000)
+
+
+def parse_symbols(raw_symbols: str) -> tuple[str, ...]:
+    symbols = tuple(validate_symbol(part) for part in raw_symbols.split(",") if part.strip())
+    if not symbols:
+        raise ValueError("--symbols must include at least one symbol")
+    return symbols
+
+
+def parse_horizons(raw_horizons: str) -> tuple[int, ...]:
+    try:
+        horizons = tuple(int(part.strip()) for part in raw_horizons.split(",") if part.strip())
+    except ValueError as exc:
+        raise ValueError("--horizons must be comma-separated positive integers") from exc
+    if not horizons or any(horizon <= 0 for horizon in horizons):
+        raise ValueError("--horizons must be comma-separated positive integers")
+    return horizons
 
 
 def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:

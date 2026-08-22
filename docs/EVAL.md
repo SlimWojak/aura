@@ -103,6 +103,44 @@ deflation beyond PSR.
 
 ## CLI examples
 
+Per-bar Ichimoku/regime IC feature screen on the default BTC+ETH 1h stores:
+
+```bash
+python -m runtime.tools.eval_run ic-screen \
+  --aura-root /var/aura \
+  --symbols PF_XBTUSD,PF_ETHUSD \
+  --tf 1h \
+  --horizons 4,12,24,48 \
+  --atr-period 14 \
+  --output-id ic-screen-20260822
+```
+
+The screen reads `${AURA_ROOT}/market/ohlcv/{PF_XBTUSD,PF_ETHUSD}/1h.jsonl`
+and writes:
+
+```text
+${AURA_ROOT}/evidence/evals/ic-screen-YYYYMMDD/report.json
+${AURA_ROOT}/evidence/evals/ic-screen-YYYYMMDD/scores.csv
+${AURA_ROOT}/evidence/evals/ic-screen-YYYYMMDD/SUMMARY.md
+```
+
+It is bar-level feature screening, not a trade backtest. Forward returns are
+`(close[t+h] - close[t]) / ATR[t]` for horizons 4/12/24/48. Continuous features
+are scored by Pearson IC. Categorical features, including the five regime states
+and `cloud_bias in {-1,0,+1}`, are scored as conditional mean forward
+ATR-normalized returns. Overlapping forward returns use Newey-West/HAC
+Bartlett-lag CIs with `lag=min(horizon, n-1)`. Benjamini-Hochberg q-values are
+computed across emitted symbol x feature/level x horizon tests.
+
+Look-ahead fence: cloud features use the displaced cloud values under bar `t`
+from raw spans at `t-displacement`; Chikou gap uses
+`close[t] - close[t-displacement]`. The chart-displaced future Chikou value is
+not used.
+
+Kill rule in the summary: a feature is dead when every usable CI for both
+PF_XBTUSD and PF_ETHUSD spans 0. Survivors are only later bake-off candidates;
+the IC screen does not mutate cartridge YAML, unlock Intern, or loosen Track A.
+
 Single cartridge eval with return stats and DSR trial count:
 
 ```bash
