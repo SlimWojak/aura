@@ -122,7 +122,7 @@
       "required": ["mode", "close_on_flat", "close_on_opposite", "max_bars_in_trade"],
       "properties": {
         "mode": {
-          "enum": ["bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop"]
+          "enum": ["bias_flip", "flat_on_rule_fail", "opposite_signal", "time_stop", "regime_exit"]
         },
         "close_on_flat": {
           "type": "boolean"

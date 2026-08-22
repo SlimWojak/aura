@@ -212,6 +212,63 @@ class EvalHarnessTests(TestCase):
         )
         self.assertGreater(report["metrics"]["total_fee_points"], 0)
 
+    def test_time_stop_exit_closes_after_max_bars_without_same_bar_reentry(self):
+        candles = [candle(index, 100 + index) for index in range(96)]
+
+        report = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(
+                regime={"type": "none", "params": {}},
+                exit_rules={
+                    "mode": "time_stop",
+                    "close_on_flat": True,
+                    "close_on_opposite": True,
+                    "max_bars_in_trade": 2,
+                },
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        time_stop_trades = [
+            trade for trade in report["trades"] if trade["exit_reason"] == "time_stop"
+        ]
+        self.assertTrue(time_stop_trades)
+        first_time_stop_index = report["trades"].index(time_stop_trades[0])
+        if first_time_stop_index + 1 < len(report["trades"]):
+            next_trade = report["trades"][first_time_stop_index + 1]
+            self.assertGreater(next_trade["entry_index"], time_stop_trades[0]["exit_index"])
+
+    def test_long_only_allowed_sides_blocks_short_entries(self):
+        closes = [140 - index for index in range(96)]
+        entry_rules = {
+            "mode": "always_on",
+            "allowed_sides": ["long"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "tenkan_over_kijun_for_long_under_for_short",
+            "require_chikou_confirmation": True,
+            "chikou_mode": "close",
+        }
+
+        report = run_backtest_cartridge(
+            [candle(index, close) for index, close in enumerate(closes)],
+            cartridge=fast_cartridge(
+                regime={"type": "none", "params": {}},
+                entry_rules=entry_rules,
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        denied_short_signals = [
+            signal
+            for signal in report["signals"]
+            if signal["bias"] == "short" and signal["entry_gate"]["reason"] == "side_not_allowed"
+        ]
+        self.assertTrue(denied_short_signals)
+        self.assertEqual(0, report["metrics"]["trade_count"])
+        self.assertGreater(report["metrics"]["entry_gate_denied_count"], 0)
+
     def test_tk_cloud_strong_detects_cross_and_filters_weak_cloud(self):
         strong_closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 110, 120, 130, 140, 150]
         weak_closes = [100, 120, 120, 120, 118, 116, 114, 112, 110, 112, 114, 116, 118]
@@ -331,6 +388,45 @@ class EvalHarnessTests(TestCase):
         self.assertGreater(gated["metrics"]["entry_gate_denied_count"], 0)
         self.assertTrue(
             any(signal["entry_gate"]["reason"] == "regime_veto" for signal in gated["signals"])
+        )
+
+    def test_regime_exit_flattens_when_open_side_no_longer_allowed(self):
+        candles = [candle(index, 100 + index) for index in range(96)]
+        states = [
+            RegimeState.TREND_BULL if index < 48 else RegimeState.RANGE
+            for index in range(len(candles))
+        ]
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots_by_state(states),
+        ):
+            report = run_backtest_cartridge(
+                candles,
+                cartridge=fast_cartridge(
+                    regime={"type": "none", "params": {}},
+                    exit_rules={
+                        "mode": "regime_exit",
+                        "close_on_flat": True,
+                        "close_on_opposite": True,
+                        "max_bars_in_trade": None,
+                    },
+                ),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertTrue(
+            any(trade["exit_reason"] == "regime_exit" for trade in report["trades"])
+        )
+        self.assertTrue(
+            any(
+                signal.get("exit_gate", {}).get("reason") == "regime_veto"
+                for signal in report["signals"]
+            )
         )
 
     def test_oos_baseline_ref_loads_ichi_v0_baseline_with_same_regime_gate(self):
@@ -835,6 +931,20 @@ def regime_snapshots(count: int, state: RegimeState) -> list[RegimeSnapshot]:
             tf="1h",
         )
         for index in range(count)
+    ]
+
+
+def regime_snapshots_by_state(states: list[RegimeState]) -> list[RegimeSnapshot]:
+    return [
+        RegimeSnapshot(
+            state=state,
+            confidence=0.9,
+            reasons=("test_fixture",),
+            features={},
+            as_of=index * 3_600_000,
+            tf="1h",
+        )
+        for index, state in enumerate(states)
     ]
 
 

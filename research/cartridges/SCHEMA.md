@@ -87,13 +87,23 @@ Allowed `exit_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `bias_flip`, `flat_on_rule_fail`, `opposite_signal`, `time_stop`. |
+| `mode` | enum | `bias_flip`, `flat_on_rule_fail`, `opposite_signal`, `time_stop`, `regime_exit`. |
 | `close_on_flat` | bool | Exit when the evaluated rule returns flat. |
 | `close_on_opposite` | bool | Exit and optionally reverse when the opposite side fires. |
 | `max_bars_in_trade` | integer/null | Optional time stop. Use `null` when disabled. |
 
 Baseline Ichimoku v0 uses `mode: bias_flip`, `close_on_flat: true`, and
 `close_on_opposite: true`.
+
+`time_stop` keeps the normal flat/opposite exit behavior and additionally exits
+after `max_bars_in_trade` completed bars in the open paper position. It does not
+re-enter on the same decision bar that triggered the time stop.
+
+`regime_exit` is only meaningful when Phase 2 regime flags such as
+`--regime-tf 4h --regime-htf 1d` are active. Entries still require the normal
+TREND side lock; while a position is open, the evaluator flattens a long when
+the current label is no longer `TREND_BULL` and flattens a short when the current
+label is no longer `TREND_BEAR`.
 
 ## Regime gates
 

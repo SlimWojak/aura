@@ -27,6 +27,9 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_params_20_60_er_v0",
                 "ichi_params_20_60_trend_v0",
                 "ichi_params_20_60_trend_eth_dd_v0",
+                "ichi_params_20_60_trend_long_only_v0",
+                "ichi_params_20_60_trend_regime_exit_v0",
+                "ichi_params_20_60_trend_timestop_v0",
                 "ichi_tenkan_bounce_trend_v0",
                 "ichi_tk_cloud_strong_v0",
                 "ichi_tk_strong_trend_cloud_color_v0",
@@ -48,7 +51,11 @@ class ResearchCartridgeTests(TestCase):
                     cartridge["baseline_ref"],
                     {"ichimoku_v0", "ichi_tk_strong_trend_only_v0", "ichi_v0_baseline"},
                 )
-                self.assertEqual({"long", "short"}, set(cartridge["entry_rules"]["allowed_sides"]))
+                allowed_sides = set(cartridge["entry_rules"]["allowed_sides"])
+                if cartridge["id"] == "ichi_params_20_60_trend_long_only_v0":
+                    self.assertEqual({"long"}, allowed_sides)
+                else:
+                    self.assertEqual({"long", "short"}, allowed_sides)
                 self.assertIn(cartridge["entry_rules"]["chikou_mode"], {"close", "strict"})
                 self.assertGreater(cartridge["kill_criteria"]["max_dd_points"], 0)
 
@@ -183,6 +190,37 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("killed kijun_bounce", tenkan_bounce["kill_criteria"]["notes"])
         self.assertIn("fee-on negative", tenkan_bounce["notes"])
         self.assertIn("prior close <= prior Tenkan", tenkan_bounce["notes"])
+
+    def test_round_five_research_intern_cartridges_load_requested_modes(self):
+        time_stop = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_params_20_60_trend_timestop_v0.yaml"
+        )
+        long_only = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_params_20_60_trend_long_only_v0.yaml"
+        )
+        regime_exit = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_params_20_60_trend_regime_exit_v0.yaml"
+        )
+
+        self.assertEqual("ichi_v0_baseline", time_stop["baseline_ref"])
+        self.assertEqual(20, time_stop["ichimoku"]["tenkan"])
+        self.assertEqual(60, time_stop["ichimoku"]["kijun"])
+        self.assertEqual("time_stop", time_stop["exit_rules"]["mode"])
+        self.assertEqual(72, time_stop["exit_rules"]["max_bars_in_trade"])
+        self.assertEqual(12000, time_stop["kill_criteria"]["max_dd_points"])
+        self.assertIn("ETH OOS must beat", time_stop["notes"])
+
+        self.assertEqual(["long"], long_only["entry_rules"]["allowed_sides"])
+        self.assertEqual("bias_flip", long_only["exit_rules"]["mode"])
+        self.assertIsNone(long_only["exit_rules"]["max_bars_in_trade"])
+        self.assertEqual(10, long_only["kill_criteria"]["min_trades"])
+        self.assertIn("Long only when TREND_BULL", long_only["notes"])
+
+        self.assertEqual(["long", "short"], regime_exit["entry_rules"]["allowed_sides"])
+        self.assertEqual("regime_exit", regime_exit["exit_rules"]["mode"])
+        self.assertIsNone(regime_exit["exit_rules"]["max_bars_in_trade"])
+        self.assertEqual(12, regime_exit["kill_criteria"]["min_trades"])
+        self.assertIn("long exits when no longer TREND_BULL", regime_exit["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")

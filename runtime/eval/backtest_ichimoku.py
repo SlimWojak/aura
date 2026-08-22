@@ -49,6 +49,9 @@ _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
 _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
 _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_v0",
+    "ichi_params_20_60_trend_timestop_v0",
+    "ichi_params_20_60_trend_long_only_v0",
+    "ichi_params_20_60_trend_regime_exit_v0",
     "ichi_tk_cross_trend_v0",
     "ichi_kumo_break_trend_v0",
     "ichi_tk_strong_trend_only_v0",
@@ -146,6 +149,10 @@ def run_backtest_cartridge(
         raise ValueError(
             f"cartridge {cartridge['id']} requires --regime-tf for Phase 2 regime hard veto"
         )
+    exit_rules = _mapping(cartridge, "exit_rules")
+    exit_mode = str(exit_rules["mode"])
+    if exit_mode == "regime_exit" and safe_regime_tf is None:
+        raise ValueError("exit_rules.mode='regime_exit' requires --regime-tf")
     params = _params_from_cartridge(cartridge)
     resolved_min_bars = min_bars if min_bars is not None else params.minimum_candles
     normalized = _prepare_candles(
@@ -198,6 +205,8 @@ def run_backtest_cartridge(
         ),
         signal_provider=signal_provider,
         entry_gate_provider=entry_gate_provider,
+        exit_rules=exit_rules,
+        exit_gate_provider=regime_gate_provider if exit_mode == "regime_exit" else None,
         allowed_entry_sides=allowed_entry_sides,
         fee_bps=fee_bps,
     )
@@ -206,7 +215,13 @@ def run_backtest_cartridge(
             "enabled": True,
             "tf": safe_regime_tf,
             "htf": safe_regime_htf,
-            "policy": "TREND_BULL allows long only; TREND_BEAR allows short only; RANGE/VOLATILE/TRANSITION deny new entries; exits always allowed.",
+            "policy": (
+                "TREND_BULL allows long only; TREND_BEAR allows short only; "
+                "RANGE/VOLATILE/TRANSITION deny new entries. Exits always "
+                "remain allowed unless exit_rules.mode='regime_exit', which "
+                "flattens an open side once the current regime no longer "
+                "permits that side."
+            ),
         }
     _attach_cartridge_metadata(report, cartridge=cartridge, runnable=True)
     return report
@@ -297,12 +312,15 @@ def _score_backtest(
     lookahead_note: str,
     signal_provider: _SignalProvider,
     entry_gate_provider: _EntryGateProvider | None = None,
+    exit_rules: Mapping[str, Any] | None = None,
+    exit_gate_provider: _EntryGateProvider | None = None,
     allowed_entry_sides: set[str] | None = None,
     fee_bps: float = 0.0,
 ) -> dict[str, Any]:
     if min_bars <= 0:
         raise ValueError("min_bars must be positive")
     resolved_fee_bps = _nonnegative_float(fee_bps, "fee_bps")
+    exit_policy = _exit_policy(exit_rules)
 
     start_index = min_bars - 1
     bias_counts: dict[str, int] = {"long": 0, "short": 0, "flat": 0}
@@ -354,11 +372,32 @@ def _score_backtest(
             signal_trace[-1]["entry_gate"] = entry_gate
 
         current_direction = int(position["direction"]) if position is not None else 0
-        if current_direction != 0 and desired_direction != current_direction:
+        exit_reason = _signal_exit_reason(
+            current_direction=current_direction,
+            desired_direction=desired_direction,
+            signal_bias=signal.bias,
+            close_on_flat=bool(exit_policy["close_on_flat"]),
+            close_on_opposite=bool(exit_policy["close_on_opposite"]),
+        )
+        if exit_reason is None and position is not None and exit_gate_provider is not None:
+            current_side = _BIAS_BY_DIRECTION[current_direction]
+            exit_gate = _normalize_entry_gate(exit_gate_provider(index, current_side))
+            signal_trace[-1]["exit_gate"] = exit_gate
+            if not bool(exit_gate["allowed"]):
+                exit_reason = "regime_exit"
+        if exit_reason is None and position is not None and _time_stop_due(
+            position=position,
+            index=index,
+            max_bars_in_trade=exit_policy["max_bars_in_trade"],
+        ):
+            exit_reason = "time_stop"
+
+        blocked_same_bar_entry = False
+        if current_direction != 0 and exit_reason is not None:
             trade = _close_trade(
                 position=position,
                 exit_execution=execution,
-                exit_reason=f"bias_{signal.bias}",
+                exit_reason=exit_reason,
                 fee_bps=resolved_fee_bps,
             )
             trades.append(trade)
@@ -366,8 +405,14 @@ def _score_backtest(
             peak_equity_points = max(peak_equity_points, equity_points)
             max_drawdown_points = max(max_drawdown_points, peak_equity_points - equity_points)
             position = None
+            blocked_same_bar_entry = exit_reason == "time_stop"
 
-        if desired_direction != 0 and position is None and bool(entry_gate["allowed"]):
+        if (
+            desired_direction != 0
+            and position is None
+            and bool(entry_gate["allowed"])
+            and not blocked_same_bar_entry
+        ):
             position = _open_position(
                 direction=desired_direction,
                 entry_execution=execution,
@@ -913,7 +958,7 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         or "setup_bars" in entry_rules
     ):
         reasons.append("TK-strong refinement entry flags are only wired for tk_cloud_bias")
-    if is_always_on and exit_mode != "bias_flip":
+    if is_always_on and exit_mode not in {"bias_flip", "time_stop", "regime_exit"}:
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_tk_cloud_strong and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
@@ -929,8 +974,6 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         reasons.append("exit_rules.close_on_flat=false is not wired")
     if not bool(exit_rules["close_on_opposite"]):
         reasons.append("exit_rules.close_on_opposite=false is not wired")
-    if exit_rules["max_bars_in_trade"] is not None:
-        reasons.append("exit_rules.max_bars_in_trade is not wired")
     if regime_type not in {"none", "adx", "er", "cloud_thickness"}:
         reasons.append(f"regime.type={regime['type']!r} is not wired")
 
@@ -1842,6 +1885,59 @@ def _normalize_entry_gate(raw_gate: Mapping[str, Any]) -> dict[str, Any]:
         "reason": str(raw_gate.get("reason", "entry_gate_unspecified")),
         "values": _stable_mapping_values(_mapping_or_empty(raw_gate.get("values"))),
     }
+
+
+def _exit_policy(exit_rules: Mapping[str, Any] | None) -> dict[str, Any]:
+    if exit_rules is None:
+        return {
+            "mode": "bias_flip",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        }
+
+    max_bars = exit_rules["max_bars_in_trade"]
+    return {
+        "mode": str(exit_rules["mode"]),
+        "close_on_flat": bool(exit_rules["close_on_flat"]),
+        "close_on_opposite": bool(exit_rules["close_on_opposite"]),
+        "max_bars_in_trade": (
+            _positive_int(max_bars, "exit_rules.max_bars_in_trade")
+            if max_bars is not None
+            else None
+        ),
+    }
+
+
+def _signal_exit_reason(
+    *,
+    current_direction: int,
+    desired_direction: int,
+    signal_bias: Bias,
+    close_on_flat: bool,
+    close_on_opposite: bool,
+) -> str | None:
+    if current_direction == 0 or desired_direction == current_direction:
+        return None
+    if desired_direction == 0 and close_on_flat:
+        return f"bias_{signal_bias}"
+    if desired_direction != 0 and close_on_opposite:
+        return f"bias_{signal_bias}"
+    return None
+
+
+def _time_stop_due(
+    *,
+    position: Mapping[str, Any],
+    index: int,
+    max_bars_in_trade: int | None,
+) -> bool:
+    if max_bars_in_trade is None:
+        return False
+    first_traded_index = int(position["entry_index"])
+    if index < first_traded_index:
+        return False
+    return (index - first_traded_index + 1) >= max_bars_in_trade
 
 
 def _attach_cartridge_metadata(
