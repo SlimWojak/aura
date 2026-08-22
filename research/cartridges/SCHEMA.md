@@ -48,7 +48,7 @@ Allowed `entry_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `kumo_break`. |
+| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `tenkan_bounce`, `kumo_break`. |
 | `allowed_sides` | list[enum] | Each item is `long` or `short`. |
 | `require_close_vs_cloud` | enum | `above_for_long_below_for_short`, `outside_cloud`, `none`. |
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
@@ -62,6 +62,10 @@ Allowed `entry_rules` keys:
 close was at or below the prior Kumo top and the current close is above the
 current Kumo top; short mirrors with the prior close at or above the prior Kumo
 bottom and the current close below the current Kumo bottom.
+
+`tenkan_bounce` is a Tenkan reclaim mode: long fires when the prior close was
+at or below prior Tenkan, current close is above current Tenkan, and current
+close is above the Kumo top; short mirrors below Tenkan and the Kumo bottom.
 
 Baseline Ichimoku v0 is represented as:
 

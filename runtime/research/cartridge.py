@@ -20,6 +20,7 @@ ENTRY_MODES = {
     "cloud_bias",
     "tk_cloud_bias",
     "kijun_bounce",
+    "tenkan_bounce",
     "kumo_break",
 }
 SIDES = {"long", "short"}

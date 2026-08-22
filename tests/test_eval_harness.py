@@ -407,16 +407,24 @@ class EvalHarnessTests(TestCase):
             )
 
     def test_new_trend_family_cartridge_requires_regime_flag(self):
-        cartridge = tk_cross_cartridge()
-        cartridge["id"] = "ichi_tk_cross_trend_v0"
+        cartridges = [
+            ("ichi_tk_cross_trend_v0", tk_cross_cartridge()),
+            ("ichi_params_20_60_trend_eth_dd_v0", fast_cartridge(regime={"type": "none", "params": {}})),
+            ("ichi_params_10_30_trend_v0", fast_cartridge(regime={"type": "none", "params": {}})),
+            ("ichi_tenkan_bounce_trend_v0", tenkan_bounce_cartridge()),
+        ]
 
-        with self.assertRaisesRegex(ValueError, "requires --regime-tf"):
-            run_backtest_cartridge(
-                [candle(index, 100 + index) for index in range(96)],
-                cartridge=cartridge,
-                symbol="PF_XBTUSD",
-                tf="1h",
-            )
+        for cartridge_id, cartridge in cartridges:
+            with self.subTest(cartridge_id=cartridge_id):
+                cartridge["id"] = cartridge_id
+
+                with self.assertRaisesRegex(ValueError, "requires --regime-tf"):
+                    run_backtest_cartridge(
+                        [candle(index, 100 + index) for index in range(96)],
+                        cartridge=cartridge,
+                        symbol="PF_XBTUSD",
+                        tf="1h",
+                    )
 
     def test_kijun_bounce_cartridge_detects_cross_back_entry(self):
         closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
@@ -431,6 +439,23 @@ class EvalHarnessTests(TestCase):
         self.assertIn("long", {trade["direction"] for trade in report["trades"]})
         long_signals = [signal for signal in report["signals"] if signal["bias"] == "long"]
         self.assertTrue(long_signals)
+
+    def test_tenkan_bounce_cartridge_detects_tenkan_reclaim_entry(self):
+        closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
+        report = run_backtest_cartridge(
+            [candle(index, close) for index, close in enumerate(closes)],
+            cartridge=tenkan_bounce_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(report["metrics"]["trade_count"], 0)
+        self.assertIn("long", {trade["direction"] for trade in report["trades"]})
+        long_signal = next(signal for signal in report["signals"] if signal["bias"] == "long")
+        self.assertTrue(long_signal["features"]["close_crossed_above_tenkan"])
+        self.assertTrue(long_signal["features"]["close_above_cloud"])
+        self.assertIn("tenkan", long_signal["components"])
+        self.assertNotIn("kijun", long_signal["components"])
 
     def test_kumo_break_cartridge_detects_close_through_cloud(self):
         closes = [140, 140, 140, 140, 90, 110, 121, 122]
@@ -768,6 +793,26 @@ def kijun_bounce_cartridge() -> dict:
             "require_close_vs_cloud": "above_for_long_below_for_short",
             "require_tk_state": "none",
             "require_chikou_confirmation": True,
+            "chikou_mode": "close",
+        },
+        exit_rules={
+            "mode": "flat_on_rule_fail",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        },
+    )
+
+
+def tenkan_bounce_cartridge() -> dict:
+    return fast_cartridge(
+        regime={"type": "none", "params": {}},
+        entry_rules={
+            "mode": "tenkan_bounce",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "none",
+            "require_chikou_confirmation": False,
             "chikou_mode": "close",
         },
         exit_rules={
