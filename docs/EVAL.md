@@ -117,6 +117,22 @@ python -m runtime.tools.eval_run matrix \
 `--metric simple` is available for a percent-return matrix, but keep decisions
 should use the same normalized metric across candidate and baseline rows.
 
+Synthetic positive/negative controls for Track A live in
+[`docs/POWER_TEST.md`](POWER_TEST.md) and run with:
+
+```bash
+python -m runtime.tools.power_test --positive \
+  --aura-root /var/aura \
+  --symbol PF_XBTUSD \
+  --tf 1h \
+  --fee-bps 4 \
+  --oos-split 0.7 \
+  --trial-count 37 \
+  --atr-period 14 \
+  --regime-tf 4h \
+  --regime-htf 1d
+```
+
 ## Phase 2 regime ablations
 
 The Phase 2 ablation cartridges in `docs/REGIME.md` are draft-only eval

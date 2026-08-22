@@ -463,14 +463,18 @@ def score_trial_matrix(
         purge_groups=purge_groups,
         embargo_groups=embargo_groups,
     )
+    pbo["n_paths"] = len(trials)
+    pbo["n_honest"] = resolved_trial_count
     return {
         "schema": TRIAL_MATRIX_SCHEMA,
         "ok": True,
         "reports_dir": str(root),
         "metric": metric,
         "trial_count": resolved_trial_count,
+        "n_honest": resolved_trial_count,
+        "n_paths": len(trials),
         "reports_scored": len(trials),
-        "dsr_note": "trial_count must count every tried parameter variant, not only surviving reports",
+        "dsr_note": "n_honest must count every tried parameter variant, not only runnable paths",
         "pbo": pbo,
         "trials": trial_summaries,
     }

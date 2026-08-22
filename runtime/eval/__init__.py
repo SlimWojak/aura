@@ -30,6 +30,11 @@ from runtime.eval.statistics import (
     score_trial_matrix,
     summarize_returns,
 )
+from runtime.eval.power_test import (
+    POWER_TEST_SCHEMA,
+    run_power_test,
+    run_power_test_from_store,
+)
 from runtime.eval.score_trials import TRIAL_LEDGER_SCHEMA, score_trials, write_summary
 
 __all__ = [
@@ -38,6 +43,7 @@ __all__ = [
     "DEFAULT_ATR_PERIOD",
     "DEFAULT_CSCV_GROUPS",
     "RETURN_STATS_SCHEMA",
+    "POWER_TEST_SCHEMA",
     "TRIAL_MATRIX_SCHEMA",
     "TRIAL_LEDGER_SCHEMA",
     "backtest_from_store",
@@ -55,6 +61,8 @@ __all__ = [
     "run_backtest_cartridge",
     "run_backtest_reference",
     "runnable_cartridge_ids",
+    "run_power_test",
+    "run_power_test_from_store",
     "score_trial_matrix",
     "score_trials",
     "signal_for_closed_bar",
