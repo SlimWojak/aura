@@ -33,6 +33,7 @@ from runtime.eval.statistics import (
 from runtime.eval.ic_screen import (
     DEFAULT_SCREEN_HORIZONS,
     DEFAULT_SCREEN_SYMBOLS,
+    FEATURE_SETS,
     IC_SCREEN_SCHEMA,
     build_bar_feature_rows,
     run_ic_screen,
@@ -54,6 +55,7 @@ __all__ = [
     "DEFAULT_CSCV_GROUPS",
     "DEFAULT_SCREEN_HORIZONS",
     "DEFAULT_SCREEN_SYMBOLS",
+    "FEATURE_SETS",
     "IC_SCREEN_SCHEMA",
     "RETURN_STATS_SCHEMA",
     "POWER_TEST_SCHEMA",

@@ -15,6 +15,7 @@ from runtime.eval import (
     DEFAULT_CSCV_GROUPS,
     DEFAULT_SCREEN_HORIZONS,
     DEFAULT_SCREEN_SYMBOLS,
+    FEATURE_SETS,
     backtest_from_store,
     cartridge_backtest_from_store,
     cartridge_oos_backtest_from_store,
@@ -238,6 +239,12 @@ def build_parser() -> ArgumentParser:
         "--output-id",
         help="evidence directory name under evidence/evals; default ic-screen-YYYYMMDD",
     )
+    ic_parser.add_argument(
+        "--feature-set",
+        choices=FEATURE_SETS,
+        default="ichimoku",
+        help="feature bank to score; default keeps the existing Ichimoku/regime screen",
+    )
 
     return parser
 
@@ -405,6 +412,7 @@ def command_ic_screen(args: Namespace) -> dict[str, Any]:
         min_count=args.min_count,
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
+        feature_set=args.feature_set,
     )
     output_id = args.output_id or f"ic-screen-{datetime.now(tz=UTC).strftime('%Y%m%d')}"
     output_dir = evidence_root(args.aura_root) / "evals" / output_id
@@ -422,6 +430,7 @@ def command_ic_screen(args: Namespace) -> dict[str, Any]:
         "eval_id": report["eval_id"],
         "symbols": report["symbols"],
         "tf": report["tf"],
+        "feature_set": report["feature_set"],
         "horizons": report["horizons"],
         "atr_period": report["atr_period"],
         "min_count": report["min_count"],

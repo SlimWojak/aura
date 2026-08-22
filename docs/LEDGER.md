@@ -530,6 +530,29 @@ cartridge YAML/status changes, no cartridge revival, no Intern unlock, no
 lower-timeframe ingest, no live scopes, and no Track A loosening. Intern remains
 frozen and Track A is unchanged.
 
+## 2026-08-22 enrichment lane harness stub
+
+Repo harness/features only; no dexter run result is recorded here.
+
+Scope: locked enrichment lane for Daily DR, Daily FVG, Chikou-vs-Daily-DR, and
+Daily-FVG/flat-Span-B IC-screen features. Definitions and fence are registered
+in `docs/briefs/2026-08-22-enrichment-lane.md`.
+
+CLI stub:
+```bash
+python3 -m runtime.tools.eval_run ic-screen \
+  --aura-root /var/aura \
+  --symbols PF_XBTUSD,PF_ETHUSD \
+  --tf 1h \
+  --horizons 4,12,24,48 \
+  --atr-period 14 \
+  --feature-set enrichment \
+  --output-id ic-screen-enrichment-20260822
+```
+
+No cartridge YAML/status changes, no killed-id revival, no Intern unlock, no
+lower-timeframe ADDR, no live scopes, and no Track A loosening.
+
 ## 2026-08-22 failed DI-expansion bake-off
 
 Binding CoS verdict for `vol_di_expand_trend_v0` at main tip `507d840`.

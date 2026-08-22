@@ -13,6 +13,16 @@ from runtime.eval.statistics import DEFAULT_ATR_PERIOD, compute_wilder_atr, norm
 from runtime.market.ohlcv import ohlcv_path, read_candles
 from runtime.market.symbols import validate_symbol, validate_tf
 from runtime.regime.classify import classify_series
+from runtime.regime.enrichment import (
+    align_daily_dealing_ranges,
+    align_latest_fvg,
+    chikou_clears_dealing_range,
+    chikou_dealing_range_clearance_atr,
+    dealing_range_position,
+    dealing_range_side,
+    flat_spanb_overlaps_fvg,
+    fvg_distance_atr,
+)
 from runtime.regime.features import build_feature_series, displaced_cloud_bounds, features_at
 from runtime.regime.types import RegimeParams, RegimeState
 
@@ -25,7 +35,7 @@ CI_Z = 1.959963984540054
 BH_ALPHA = 0.05
 CI_METHOD = "newey_west_hac_bartlett"
 
-CONTINUOUS_FEATURES = (
+ICHIMOKU_CONTINUOUS_FEATURES = (
     "price_cloud_distance_atr",
     "tk_spread_atr",
     "chikou_gap_atr",
@@ -37,7 +47,7 @@ CONTINUOUS_FEATURES = (
     "flat_tenkan_bars",
 )
 
-CATEGORICAL_LEVELS: dict[str, tuple[Any, ...] | None] = {
+ICHIMOKU_CATEGORICAL_LEVELS: dict[str, tuple[Any, ...] | None] = {
     "regime_state": tuple(state.value for state in RegimeState),
     "cloud_bias": (-1, 0, 1),
     "price_vs_kumo": ("above", "below", "inside"),
@@ -46,6 +56,24 @@ CATEGORICAL_LEVELS: dict[str, tuple[Any, ...] | None] = {
     "thin_kumo": (False, True),
     "future_twist": (False, True),
 }
+
+ENRICHMENT_CONTINUOUS_FEATURES = (
+    "daily_dr_position",
+    "daily_fvg_distance_atr",
+    "chikou_daily_dr_clearance_atr",
+)
+
+ENRICHMENT_CATEGORICAL_LEVELS: dict[str, tuple[Any, ...] | None] = {
+    "daily_dr_side": ("discount", "equilibrium", "premium"),
+    "daily_fvg_side": ("bullish", "bearish", "none"),
+    "daily_fvg_price_inside": (False, True),
+    "chikou_clears_daily_dr": (False, True),
+    "fvg_flat_spanb_overlap": (False, True),
+}
+
+CONTINUOUS_FEATURES = ICHIMOKU_CONTINUOUS_FEATURES
+CATEGORICAL_LEVELS = ICHIMOKU_CATEGORICAL_LEVELS
+FEATURE_SETS = ("ichimoku", "enrichment", "all")
 
 
 def run_ic_screen_from_store(
@@ -58,6 +86,7 @@ def run_ic_screen_from_store(
     min_count: int = DEFAULT_MIN_COUNT,
     max_bars: int | None = None,
     since_ts_ms: int | None = None,
+    feature_set: str = "ichimoku",
 ) -> dict[str, Any]:
     """Load stored OHLCV and run the paper-only bar feature screen."""
 
@@ -78,6 +107,7 @@ def run_ic_screen_from_store(
         atr_period=atr_period,
         min_count=min_count,
         aura_root=aura_root,
+        feature_set=feature_set,
     )
 
 
@@ -89,11 +119,13 @@ def run_ic_screen(
     atr_period: int = DEFAULT_ATR_PERIOD,
     min_count: int = DEFAULT_MIN_COUNT,
     aura_root: str | Path | None = None,
+    feature_set: str = "ichimoku",
 ) -> dict[str, Any]:
     """Score closed-bar feature values against forward ATR-normalized returns."""
 
     safe_tf = validate_tf(tf)
     safe_horizons = _validated_horizons(horizons)
+    safe_feature_set = _validated_feature_set(feature_set)
     if atr_period <= 0:
         raise ValueError("atr_period must be positive")
     if min_count <= 0:
@@ -110,6 +142,7 @@ def run_ic_screen(
             horizons=safe_horizons,
             atr_period=atr_period,
             min_count=min_count,
+            feature_set=safe_feature_set,
         )
         symbol_reports.append(symbol_report)
         scores.extend(symbol_report["scores"])
@@ -123,6 +156,7 @@ def run_ic_screen(
         "generated_at": generated_at,
         "symbols": [report["symbol"] for report in symbol_reports],
         "tf": safe_tf,
+        "feature_set": safe_feature_set,
         "horizons": list(safe_horizons),
         "atr_period": atr_period,
         "min_count": min_count,
@@ -131,16 +165,16 @@ def run_ic_screen(
             report["symbol"]: str(ohlcv_path(report["symbol"], safe_tf, aura_root_override=aura_root))
             for report in symbol_reports
         },
-        "feature_contract": {
-            "continuous": list(CONTINUOUS_FEATURES),
-            "categorical": list(CATEGORICAL_LEVELS),
-            "regime_states": [state.value for state in RegimeState],
-        },
+        "feature_contract": _feature_contract(safe_feature_set),
         "lookahead_note": (
             "Bar t features use closed-bar values only. Cloud features read "
             "Ichimoku displaced spans under bar t, which are raw spans from "
             "t-displacement. Chikou gap uses close[t] - close[t-displacement]; "
-            "the chart-displaced future Chikou value is not used."
+            "the chart-displaced future Chikou value is not used. Enrichment "
+            "features use only completed higher-timeframe candles; Daily DR "
+            "swings require the next daily candle to close before confirmation, "
+            "and Chikou-vs-DR compares close[t] with the Daily DR known at "
+            "t-displacement."
         ),
         "forward_return_note": (
             "Forward returns are (close[t+horizon] - close[t]) / ATR[t], "
@@ -175,24 +209,29 @@ def score_symbol(
     atr_period: int = DEFAULT_ATR_PERIOD,
     min_count: int = DEFAULT_MIN_COUNT,
     params: RegimeParams | None = None,
+    feature_set: str = "ichimoku",
 ) -> dict[str, Any]:
     safe_symbol = validate_symbol(symbol)
     safe_tf = validate_tf(tf)
     if not candles:
         raise ValueError(f"no stored candles for {safe_symbol} {safe_tf}")
+    safe_feature_set = _validated_feature_set(feature_set)
     resolved_params = params or RegimeParams(regime_tf=safe_tf, htf_tf=None)
     feature_rows = build_bar_feature_rows(
         candles,
         tf=safe_tf,
         params=resolved_params,
         atr_period=atr_period,
+        symbol=safe_symbol,
+        feature_set=safe_feature_set,
     )
     closes = [_finite_float(candle.get("close"), f"candles[{index}].close") for index, candle in enumerate(candles)]
     atr_values = compute_wilder_atr(candles, period=atr_period)
     scores: list[dict[str, Any]] = []
     for horizon in horizons:
         returns = _forward_atr_returns(closes, atr_values, horizon=horizon)
-        for feature_name in CONTINUOUS_FEATURES:
+        continuous_features, categorical_levels = _features_for_set(safe_feature_set)
+        for feature_name in continuous_features:
             scores.append(
                 _score_continuous_feature(
                     feature_rows,
@@ -204,7 +243,7 @@ def score_symbol(
                     min_count=min_count,
                 )
             )
-        for feature_name, fixed_levels in CATEGORICAL_LEVELS.items():
+        for feature_name, fixed_levels in categorical_levels.items():
             scores.extend(
                 _score_categorical_feature(
                     feature_rows,
@@ -234,14 +273,34 @@ def build_bar_feature_rows(
     tf: str,
     params: RegimeParams | None = None,
     atr_period: int = DEFAULT_ATR_PERIOD,
+    symbol: str | None = None,
+    feature_set: str = "ichimoku",
 ) -> list[dict[str, Any]]:
     """Build look-ahead-safe feature rows aligned to input candles."""
 
     safe_tf = validate_tf(tf)
+    safe_feature_set = _validated_feature_set(feature_set)
+    include_enrichment = safe_feature_set in ("enrichment", "all")
+    safe_symbol = validate_symbol(symbol) if symbol is not None else None
+    if include_enrichment and safe_tf != "1h":
+        raise ValueError("enrichment feature set requires stored 1h candles")
+    if include_enrichment and safe_symbol is None:
+        safe_symbol = _symbol_from_candles(candles)
     resolved_params = params or RegimeParams(regime_tf=safe_tf, htf_tf=None)
     feature_series = build_feature_series(candles, params=resolved_params)
     regime_snapshots = classify_series(candles, params=resolved_params, tf=safe_tf, htf_candles=None)
     atr_values = compute_wilder_atr(candles, period=atr_period)
+    closes = [point.close for point in feature_series.ichimoku.points]
+    daily_ranges = (
+        align_daily_dealing_ranges(candles, symbol=safe_symbol, source_tf=safe_tf)
+        if include_enrichment
+        else [None] * len(candles)
+    )
+    daily_fvgs = (
+        align_latest_fvg(candles, symbol=safe_symbol, source_tf=safe_tf, target_tf="1d")
+        if include_enrichment
+        else [None] * len(candles)
+    )
     rows: list[dict[str, Any]] = []
     for index in range(len(candles)):
         features = features_at(feature_series, index=index, params=resolved_params)
@@ -284,6 +343,37 @@ def build_bar_feature_rows(
             "flat_kijun_bars": features.get("flat_kijun_bars"),
             "flat_tenkan_bars": features.get("flat_tenkan_bars"),
         }
+        if include_enrichment:
+            daily_range = daily_ranges[index]
+            daily_fvg = daily_fvgs[index]
+            row.update(
+                {
+                    "daily_dr_side": dealing_range_side(close, daily_range),
+                    "daily_dr_position": dealing_range_position(close, daily_range),
+                    "daily_fvg_side": "none" if daily_fvg is None else daily_fvg.side,
+                    "daily_fvg_price_inside": False if daily_fvg is None else daily_fvg.contains(close),
+                    "daily_fvg_distance_atr": fvg_distance_atr(close, daily_fvg, atr),
+                    "chikou_clears_daily_dr": chikou_clears_dealing_range(
+                        closes,
+                        daily_ranges,
+                        index=index,
+                        displacement=feature_series.ichimoku.params.displacement,
+                    ),
+                    "chikou_daily_dr_clearance_atr": chikou_dealing_range_clearance_atr(
+                        closes,
+                        daily_ranges,
+                        index=index,
+                        displacement=feature_series.ichimoku.params.displacement,
+                        atr=atr,
+                    ),
+                    "fvg_flat_spanb_overlap": flat_spanb_overlaps_fvg(
+                        span_b=point.senkou_span_b_displaced,
+                        flat_spanb_bars=features.get("flat_spanb_bars"),
+                        flat_n=resolved_params.flat_n,
+                        gap=daily_fvg,
+                    ),
+                }
+            )
         rows.append(row)
     return rows
 
@@ -356,7 +446,8 @@ def summary_markdown(report: Mapping[str, Any]) -> str:
         "",
         (
             f"Scope: symbols `{', '.join(str(symbol) for symbol in report.get('symbols', []))}`, "
-            f"tf `{report.get('tf')}`, horizons `{', '.join(str(h) for h in report.get('horizons', []))}`."
+            f"tf `{report.get('tf')}`, feature set `{report.get('feature_set')}`, "
+            f"horizons `{', '.join(str(h) for h in report.get('horizons', []))}`."
         ),
         "",
         "This is a paper-only pre-registration feature screen. It does not mutate cartridges, unlock Intern, or loosen Track A.",
@@ -670,6 +761,61 @@ def _validated_horizons(horizons: Sequence[int]) -> tuple[int, ...]:
     if any(horizon <= 0 for horizon in clean):
         raise ValueError("horizons must be positive bar counts")
     return clean
+
+
+def _validated_feature_set(feature_set: str) -> str:
+    if feature_set not in FEATURE_SETS:
+        raise ValueError(f"feature_set must be one of: {', '.join(FEATURE_SETS)}")
+    return feature_set
+
+
+def _features_for_set(feature_set: str) -> tuple[tuple[str, ...], dict[str, tuple[Any, ...] | None]]:
+    safe_feature_set = _validated_feature_set(feature_set)
+    if safe_feature_set == "ichimoku":
+        return ICHIMOKU_CONTINUOUS_FEATURES, dict(ICHIMOKU_CATEGORICAL_LEVELS)
+    if safe_feature_set == "enrichment":
+        return ENRICHMENT_CONTINUOUS_FEATURES, dict(ENRICHMENT_CATEGORICAL_LEVELS)
+    if safe_feature_set == "all":
+        categorical = dict(ICHIMOKU_CATEGORICAL_LEVELS)
+        categorical.update(ENRICHMENT_CATEGORICAL_LEVELS)
+        return ICHIMOKU_CONTINUOUS_FEATURES + ENRICHMENT_CONTINUOUS_FEATURES, categorical
+    raise ValueError(f"unknown feature_set: {feature_set}")
+
+
+def _feature_contract(feature_set: str) -> dict[str, Any]:
+    continuous, categorical = _features_for_set(feature_set)
+    return {
+        "feature_set": feature_set,
+        "continuous": list(continuous),
+        "categorical": list(categorical),
+        "regime_states": [state.value for state in RegimeState],
+        "enrichment_definitions": (
+            None
+            if feature_set == "ichimoku"
+            else {
+                "daily_dealing_range": (
+                    "latest confirmed strict 3-daily-bar swing high paired with latest "
+                    "confirmed strict 3-daily-bar swing low; confirmation waits for the "
+                    "next daily candle close"
+                ),
+                "daily_fvg": (
+                    "latest confirmed classic 3-candle daily fair value gap; bullish "
+                    "when candle[i].low > candle[i-2].high, bearish when "
+                    "candle[i].high < candle[i-2].low"
+                ),
+                "flat_spanb_overlap": (
+                    "existing lookahead-safe displaced Senkou Span B under bar t is "
+                    "flat for flat_n bars and lies inside the latest daily FVG"
+                ),
+            }
+        ),
+    }
+
+
+def _symbol_from_candles(candles: Sequence[Mapping[str, Any]]) -> str:
+    if not candles:
+        raise ValueError("candles must not be empty")
+    return validate_symbol(str(candles[0].get("symbol", "")))
 
 
 def _best_score_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
