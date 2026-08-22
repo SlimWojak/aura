@@ -13,7 +13,7 @@
 
 ## Credentials / MCP
 - [ ] Vault namespace `aura/`
-- [ ] Kraken MCP: `-s market,paper,futures-paper` only
+- [ ] Kraken MCP: `-s market,paper` only; futures paper is CLI-only on dexter
 - [ ] No `trade` / `futures` / `funding` / `earn` / `subaccount` / `all`
 - [ ] No withdraw tools; no main HL key on agent hosts
 - [ ] Delegates (Claude/Codex/Kimi) paper profile only

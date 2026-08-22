@@ -1,0 +1,16 @@
+---
+description: Aura paper-only isolation fence for Cursor and cloud agents
+alwaysApply: true
+---
+
+# Aura paper fence
+
+- Work only inside `SlimWojak/aura`; do not import, vendor, submodule, or write
+  constellation/ATOM/RIVER clinical paths.
+- Keep all trading work paper-only. Do not add live Kraken scopes, live keys,
+  withdraw/funding/earn/subaccount tools, `all`, or `--allow-dangerous`.
+- Kraken MCP is spot paper only: `market,paper`. Futures paper is CLI-only on
+  dexter.
+- Runtime data belongs on dexter under `/var/aura`; cloud agents should produce
+  repo PRs and reviewable artifacts, not runtime state.
+- No autopromote from paper to live. Agents propose; Risk/Ops and Slim decide.
