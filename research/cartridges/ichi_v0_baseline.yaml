@@ -1,0 +1,39 @@
+id: ichi_v0_baseline
+title: Ichimoku v0 always-on baseline
+status: queued
+thesis: Baseline cartridge for the current always-on Ichimoku v0 rules so future variants can be compared against the known chop failure mode.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichimoku_v0
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 12000
+  min_trades: 50
+  must_beat_baseline: false
+  baseline_metric: total_pnl_points
+  notes: Baseline is evidence, not an edge claim; keep only as the comparison reference.
+sources:
+  - docs/BUILD_PLAN.md
+  - runtime/brain/ichimoku.py
+  - runtime/eval/backtest_ichimoku.py
+notes: Current full PF_XBTUSD 1h naive backtest is negative with large drawdown, so this cartridge anchors kill and keep comparisons.

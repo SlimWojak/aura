@@ -1,0 +1,40 @@
+id: ichi_adx_regime_v0
+title: Ichimoku v0 with ADX regime gate
+status: queued
+thesis: Keep the baseline Ichimoku entries but only evaluate them when trend strength is high enough, reducing chop exposure that hurt the always-on backtest.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichimoku_v0
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: adx
+  params:
+    period: 14
+    threshold: 25
+kill_criteria:
+  max_dd_points: 9000
+  min_trades: 30
+  must_beat_baseline: true
+  baseline_metric: max_drawdown_points
+  notes: Kill if drawdown is not materially lower than baseline or if trade count is too small to trust.
+sources:
+  - docs/BUILD_PLAN.md
+  - https://www.investopedia.com/terms/a/adx.asp
+notes: Proposed first threshold is 25; a threshold of 20 is the gentler follow-up if 25 starves the sample.
