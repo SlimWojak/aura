@@ -17,6 +17,8 @@ index:
   current close (the Chikou value plotted 26 bars back) is above close[t-26].
 - ``short`` when close is below the cloud bottom, Tenkan is below Kijun, and the
   current close is below close[t-26].
+- Strict Chikou research variants keep the same cloud and TK state while
+  comparing long close against high[t-26] and short close against low[t-26].
 - ``flat`` otherwise.
 
 The output includes raw spans, chart-displaced spans, and boolean feature flags
@@ -26,12 +28,13 @@ so eval can retune the rule later without rewriting the math.
 from __future__ import annotations
 
 from math import isfinite
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 from runtime.brain.types import IchimokuParams, IchimokuPoint, IchimokuSeries, IchimokuSignal
 
 
 DEFAULT_PARAMS = IchimokuParams()
+ChikouMode = Literal["close", "strict"]
 
 
 def compute_ichimoku(
@@ -98,9 +101,16 @@ def compute_ichimoku(
     return IchimokuSeries(ok=ok, reason=reason, params=params, points=tuple(points))
 
 
-def signal_from_series(series: IchimokuSeries, *, index: int | None = None) -> IchimokuSignal:
+def signal_from_series(
+    series: IchimokuSeries,
+    *,
+    index: int | None = None,
+    chikou_mode: ChikouMode = "close",
+) -> IchimokuSignal:
     """Return the latest closed-bar Ichimoku v0 signal."""
 
+    if chikou_mode not in ("close", "strict"):
+        raise ValueError("chikou_mode must be close or strict")
     if not series.points:
         return _empty_signal(series.params, "no_candles")
     if not series.ok:
@@ -111,7 +121,10 @@ def signal_from_series(series: IchimokuSeries, *, index: int | None = None) -> I
     if reference_index < 0:
         return _empty_signal(series.params, "missing_chikou_reference")
 
-    reference_close = series.points[reference_index].close
+    reference_point = series.points[reference_index]
+    reference_close = reference_point.close
+    reference_high = reference_point.high
+    reference_low = reference_point.low
     required_components = (
         point.tenkan,
         point.kijun,
@@ -129,14 +142,22 @@ def signal_from_series(series: IchimokuSeries, *, index: int | None = None) -> I
     cloud_bottom = min(span_a, span_b)
     close = point.close
 
+    chikou_above_reference = close > reference_close
+    chikou_below_reference = close < reference_close
+    if chikou_mode == "strict":
+        chikou_above_reference = close > reference_high
+        chikou_below_reference = close < reference_low
+
     features = {
         "has_cloud": True,
         "close_above_cloud": close > cloud_top,
         "close_below_cloud": close < cloud_bottom,
         "tenkan_above_kijun": tenkan > kijun,
         "tenkan_below_kijun": tenkan < kijun,
-        "chikou_above_reference": close > reference_close,
-        "chikou_below_reference": close < reference_close,
+        "chikou_above_reference": chikou_above_reference,
+        "chikou_below_reference": chikou_below_reference,
+        "chikou_mode_close": chikou_mode == "close",
+        "chikou_mode_strict": chikou_mode == "strict",
     }
     features["bullish_rule"] = (
         features["close_above_cloud"]
@@ -166,8 +187,11 @@ def signal_from_series(series: IchimokuSeries, *, index: int | None = None) -> I
         "senkou_span_a_displaced": span_a,
         "senkou_span_b_displaced": span_b,
         "chikou_value": close,
+        "chikou_mode": chikou_mode,
         "chikou_reference_index": reference_index,
         "chikou_reference_close": reference_close,
+        "chikou_reference_high": reference_high,
+        "chikou_reference_low": reference_low,
     }
     return IchimokuSignal(
         ok=True,

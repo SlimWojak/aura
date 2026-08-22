@@ -66,7 +66,8 @@
         "allowed_sides",
         "require_close_vs_cloud",
         "require_tk_state",
-        "require_chikou_confirmation"
+        "require_chikou_confirmation",
+        "chikou_mode"
       ],
       "properties": {
         "mode": {
@@ -89,6 +90,9 @@
         },
         "require_chikou_confirmation": {
           "type": "boolean"
+        },
+        "chikou_mode": {
+          "enum": ["close", "strict"]
         }
       }
     },

@@ -53,6 +53,7 @@ Allowed `entry_rules` keys:
 | `require_close_vs_cloud` | enum | `above_for_long_below_for_short`, `outside_cloud`, `none`. |
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
 | `require_chikou_confirmation` | bool | Mirrors Ichimoku v0 Chikou confirmation when `true`. |
+| `chikou_mode` | enum | `close` compares close vs close[t-displacement]; `strict` compares long close vs high[t-displacement] and short close vs low[t-displacement]. |
 
 Baseline Ichimoku v0 is represented as:
 
@@ -65,6 +66,7 @@ entry_rules:
   require_close_vs_cloud: above_for_long_below_for_short
   require_tk_state: tenkan_over_kijun_for_long_under_for_short
   require_chikou_confirmation: true
+  chikou_mode: close
 ```
 
 ## Exit rule vocabulary

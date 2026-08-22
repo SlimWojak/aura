@@ -10,7 +10,14 @@ import os
 from pathlib import Path
 from typing import Any, Sequence
 
-from runtime.eval import backtest_from_store, score_trials, write_report, write_summary
+from runtime.eval import (
+    backtest_from_store,
+    cartridge_backtest_from_store,
+    runnable_cartridge_ids,
+    score_trials,
+    write_report,
+    write_summary,
+)
 from runtime.market import DEFAULT_SYMBOLS, DEFAULT_TFS, validate_symbol, validate_tf
 
 
@@ -26,6 +33,19 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         result = dispatch(args)
+    except NotImplementedError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": str(exc),
+                    "runnable_cartridges": runnable_cartridge_ids(),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 1
     except (OSError, ValueError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
         return 1
@@ -63,6 +83,34 @@ def build_parser() -> ArgumentParser:
         help="print compact metrics JSON; full report and trades JSONL are still written",
     )
 
+    cartridge_parser = subparsers.add_parser(
+        "cartridge",
+        help="backtest a supported research cartridge over stored OHLCV",
+    )
+    cartridge_source = cartridge_parser.add_mutually_exclusive_group(required=True)
+    cartridge_source.add_argument("--id", dest="cartridge_id", help="cartridge id from research/cartridges")
+    cartridge_source.add_argument("--path", dest="cartridge_path", help="explicit cartridge YAML path")
+    add_market_args(cartridge_parser)
+    cartridge_parser.add_argument(
+        "--min-bars",
+        type=int,
+        help="minimum closed candles before scoring; defaults to cartridge Ichimoku minimum",
+    )
+    cartridge_parser.add_argument(
+        "--max-bars",
+        type=int,
+        help="score at most the latest N stored candles after --since filtering",
+    )
+    cartridge_parser.add_argument(
+        "--since",
+        help="score candles at or after ISO time, unix seconds, or unix milliseconds",
+    )
+    cartridge_parser.add_argument(
+        "--metrics-only",
+        action="store_true",
+        help="print compact metrics JSON; full report and trades JSONL are still written",
+    )
+
     ledger_parser = subparsers.add_parser("ledger", help="rebuild trial ledger summary")
     ledger_parser.add_argument("--aura-root", help="override AURA_ROOT; dexter default is /var/aura")
 
@@ -79,6 +127,8 @@ def dispatch(args: Namespace) -> dict[str, Any]:
     match args.command:
         case "backtest":
             return command_backtest(args)
+        case "cartridge":
+            return command_cartridge(args)
         case "ledger":
             return command_ledger(args)
         case _:
@@ -110,6 +160,33 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
     return report
 
 
+def command_cartridge(args: Namespace) -> dict[str, Any]:
+    symbol = validate_symbol(args.symbol)
+    tf = validate_tf(args.tf)
+    report = cartridge_backtest_from_store(
+        cartridge_id=args.cartridge_id,
+        cartridge_path=args.cartridge_path,
+        symbol=symbol,
+        tf=tf,
+        aura_root=args.aura_root,
+        min_bars=args.min_bars,
+        max_bars=args.max_bars,
+        since_ts_ms=parse_since_ts_ms(args.since),
+    )
+    eval_id = default_eval_id(symbol=symbol, tf=tf, cartridge_id=report["cartridge"]["id"])
+    output_dir = evidence_root(args.aura_root) / "evals" / eval_id
+    report["eval_id"] = eval_id
+    report["outputs"] = {
+        "report_json": str(output_dir / "report.json"),
+        "trades_jsonl": str(output_dir / "trades.jsonl"),
+    }
+    outputs = write_report(report, output_dir)
+    report["outputs"] = outputs
+    if args.metrics_only:
+        return metrics_only_report(report)
+    return report
+
+
 def command_ledger(args: Namespace) -> dict[str, Any]:
     summary = score_trials(aura_root=args.aura_root)
     output_path = ledger_summary_path(args.aura_root)
@@ -127,9 +204,10 @@ def ledger_summary_path(aura_root: str | Path | None) -> Path:
     return evidence_root(aura_root) / "ledger" / "summary.json"
 
 
-def default_eval_id(*, symbol: str, tf: str) -> str:
+def default_eval_id(*, symbol: str, tf: str, cartridge_id: str | None = None) -> str:
     safe_symbol = symbol.lower().replace("_", "-")
-    return f"E-ichi-{safe_symbol}-{tf}-{datetime.now(tz=UTC).strftime('%Y%m%dT%H%M%SZ')}"
+    suffix = f"{cartridge_id}-" if cartridge_id is not None else ""
+    return f"E-ichi-{suffix}{safe_symbol}-{tf}-{datetime.now(tz=UTC).strftime('%Y%m%dT%H%M%SZ')}"
 
 
 def parse_since_ts_ms(raw_since: str | None) -> int | None:
@@ -171,6 +249,7 @@ def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
         "evaluated_bars",
         "min_bars",
         "params",
+        "cartridge",
         "engine",
         "window",
         "metrics",

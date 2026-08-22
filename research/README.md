@@ -24,8 +24,17 @@ machine-readable handoff between the Research Intern and CoS.
 4. **Paper backtest**
    - CoS runs the existing paper eval path, starting with
      `python -m runtime.tools.eval_run backtest --symbol PF_XBTUSD --tf 1h`.
-   - Cartridge-specific regime gates or rule variants may require follow-up
-     eval wiring; this queue does not imply runtime admission.
+   - Supported cartridges run through the cartridge eval command:
+     ```bash
+     python -m runtime.tools.eval_run cartridge --id ichi_v0_baseline --symbol PF_XBTUSD --tf 1h --metrics-only
+     python -m runtime.tools.eval_run cartridge --id ichi_adx_regime_v0 --symbol PF_XBTUSD --tf 1h --metrics-only
+     python -m runtime.tools.eval_run cartridge --id ichi_params_20_60_v0 --symbol PF_XBTUSD --tf 1h --metrics-only
+     python -m runtime.tools.eval_run cartridge --id ichi_chikou_open_space_v0 --symbol PF_XBTUSD --tf 1h --metrics-only
+     ```
+   - Current runnable cartridge features are baseline Ichimoku v0, alternate
+     Ichimoku parameters, strict Chikou open-space confirmation, and ADX entry
+     gating. `ichi_tk_cloud_v0` remains a phase-2 seed until eval distinguishes
+     TK cross events from the current baseline TK state.
 5. **Ledger kill/keep**
    - Results are recorded in the eval/trial ledger with the cartridge id,
      baseline reference, and a short kill/keep rationale.
