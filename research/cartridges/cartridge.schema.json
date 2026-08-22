@@ -29,7 +29,15 @@
       "minLength": 1
     },
     "status": {
-      "enum": ["draft", "queued", "tested", "killed", "kept"]
+      "enum": [
+        "draft",
+        "queued",
+        "tested",
+        "killed",
+        "kept",
+        "champion_control",
+        "scarred_control"
+      ]
     },
     "thesis": {
       "type": "string",

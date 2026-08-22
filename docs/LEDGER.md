@@ -272,3 +272,20 @@ HTF+width-only thin baseline rerun below.
 | 2026-08-22 | `ichi_kumo_break_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR -15.91 < thin baseline 43.74. XBT OOS ATR -1.92 > thin baseline -7.33, but IS failed the IS+OOS beat gate. ETH also failed. | false | killed | Killed forever. Do not revive `ichi_kumo_break_thin_v0` or the older killed `ichi_kumo_break_trend_v0`. |
 | 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR 64.55 and OOS ATR 4.60 beat thin baseline 43.74 and -7.33. ETH OOS ATR 34.92 lost to thin baseline 38.02. maxDD pts OK. | true on XBT | kept | Kept provisional paper only; not live. Same BTC-primary scar pattern as prior keeps; ETH remains secondary context. |
 | 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS/OOS ATR 120.35/60.65 beat thin baseline 43.74/-7.33. ETH IS/OOS ATR 190.88/97.61 beat thin baseline 133.30/38.02. Not no-op versus always_on: XBT trades 362 vs 338, overlap 78. | true | kept | Kept provisional paper only; not live. Strongest R7 candidate, but no autopromote. |
+
+## 2026-08-22 status hygiene demotion bank
+
+Fable+Grok lateral review closes the misleading provisional `kept` labels without
+forever-killing any id. This is paper-only status hygiene: no strategy logic,
+regime defaults, live scopes, runtime state, or runner authority changes; no
+previously killed id is revived; Intern R8 remains frozen.
+
+Evidence cited from PR #34 Track A rescore:
+`/var/aura/evidence/evals/track-a-rescore-20260822/`, and PR #35 R7 thin-spine
+bake-off: `/var/aura/evidence/evals/r7-thin-spine-20260822/`.
+
+| Date | Cartridge id | Prior status | New status | Rationale |
+|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_v0` | kept | scarred_control | Track A/R7 honesty makes the old keep a provisional-fail: BTC residual evidence remains useful as a control, but ETH, drawdown, DSR/PBO, and both-symbol baseline gates do not support runner status. |
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | kept | scarred_control | R7 BTC-primary residual passed, but ETH lost to the thin baseline; retain as a scarred paper control only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | kept | champion_control | Best residual R7 ATR control: XBT and ETH beat thin baselines, but this remains a benchmark/control only, not a runner and not live. |
