@@ -66,6 +66,7 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_v0_trend_chandelier_v0",
                 "ichi_v0_trend_kijun_trail_v0",
                 "ichi_v0_baseline",
+                "vol_di_expand_trend_v0",
             },
             {cartridge["id"] for cartridge in cartridges},
         )
@@ -98,6 +99,7 @@ class ResearchCartridgeTests(TestCase):
                         "ichi_params_20_60_trend_v0",
                         "ichi_p2_abfull_eth_v0",
                         "ichi_p2_abfull_xbt_v0",
+                        "ichi_cloud_bias_tsmom_thin_v0",
                     },
                 )
                 allowed_sides = set(cartridge["entry_rules"]["allowed_sides"])
@@ -454,6 +456,28 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("docs/LEDGER.md", cartridge["sources"])
         self.assertIn("6a4054c", cartridge["notes"])
         self.assertIn("do not revive", cartridge["notes"])
+
+    def test_post_ic_vol_di_expansion_draft_loads_requested_contract(self):
+        cartridge = load_cartridge(CARTRIDGE_ROOT / "vol_di_expand_trend_v0.yaml")
+
+        self.assertEqual("draft", cartridge["status"])
+        self.assertEqual("PF_XBTUSD", cartridge["symbol"])
+        self.assertEqual("1h", cartridge["tf"])
+        self.assertEqual("ichi_cloud_bias_tsmom_thin_v0", cartridge["baseline_ref"])
+        self.assertEqual("vol_di_expand_trend", cartridge["entry_rules"]["mode"])
+        self.assertEqual("none", cartridge["entry_rules"]["require_tk_state"])
+        self.assertFalse(cartridge["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual(14, cartridge["entry_rules"]["di_period"])
+        self.assertEqual(18.0, cartridge["entry_rules"]["di_spread_min"])
+        self.assertEqual(6.0, cartridge["entry_rules"]["di_spread_delta_min"])
+        self.assertEqual(3, cartridge["entry_rules"]["di_expansion_lookback"])
+        self.assertEqual(0.0, cartridge["entry_rules"]["price_cloud_distance_atr_min"])
+        self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
+        self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
+        self.assertIn("/var/aura/evidence/evals/ic-screen-20260822/", cartridge["notes"])
+        self.assertIn("Intern mill remains frozen", cartridge["notes"])
+        self.assertIn("Do not use adx, flat_*, kumo_width_atr, or tk_spread_atr", cartridge["notes"])
+        self.assertIn("vol_di_expand_trend_v0", cartridge["kill_criteria"]["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")

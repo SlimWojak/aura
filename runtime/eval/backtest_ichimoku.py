@@ -27,7 +27,15 @@ from runtime.brain import compute_ichimoku, signal_from_series
 from runtime.brain.types import Bias, IchimokuParams, IchimokuSignal
 from runtime.eval.statistics import DEFAULT_ATR_PERIOD, build_return_report, compute_wilder_atr
 from runtime.market import funding_path, ohlcv_path, read_candles, read_funding_rates, validate_symbol, validate_tf
-from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
+from runtime.regime import (
+    RegimeParams,
+    RegimeSnapshot,
+    RegimeState,
+    classify_series,
+    compute_directional_movement,
+    regime_allows,
+    resample_1h_candles,
+)
 from runtime.research.cartridge import load_cartridge, load_cartridges
 
 
@@ -90,9 +98,11 @@ _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_v0_trend_atr_stop_v0",
     "ichi_v0_trend_chandelier_v0",
     "ichi_v0_trend_kijun_trail_v0",
+    "vol_di_expand_trend_v0",
 }
 _SignalProvider = Callable[[int], IchimokuSignal]
 _EntryGateProvider = Callable[[int, Bias], Mapping[str, Any]]
+_RegimeSnapshotProvider = Callable[[int], RegimeSnapshot | None]
 
 
 def run_backtest(
@@ -228,6 +238,18 @@ def run_backtest_cartridge(
         if phase2_regime_enabled
         else None
     )
+    regime_snapshot_provider = (
+        _regime_snapshot_provider(
+            candles,
+            symbol=safe_symbol,
+            regime_tf=safe_regime_tf,
+            regime_htf=safe_regime_htf,
+            params=phase2_regime_params,
+            source_candles=regime_source_candles,
+        )
+        if phase2_regime_enabled
+        else None
+    )
     regime_gate_provider = (
         _regime_entry_gate_provider(
             candles,
@@ -236,6 +258,7 @@ def run_backtest_cartridge(
             regime_htf=safe_regime_htf,
             params=phase2_regime_params,
             source_candles=regime_source_candles,
+            snapshot_provider=regime_snapshot_provider,
         )
         if phase2_regime_enabled
         else None
@@ -258,7 +281,12 @@ def run_backtest_cartridge(
         regime_gate_provider,
         confirm_gate_provider,
     )
-    signal_provider = _signal_provider_for_cartridge(series, cartridge=cartridge)
+    signal_provider = _signal_provider_for_cartridge(
+        series,
+        cartridge=cartridge,
+        candles=normalized,
+        regime_snapshot_provider=regime_snapshot_provider,
+    )
     report = _score_backtest(
         normalized,
         symbol=safe_symbol,
@@ -1233,6 +1261,14 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         and not bool(entry_rules["require_chikou_confirmation"])
         and entry_rules["chikou_mode"] == "close"
     )
+    is_vol_di_expand_trend = (
+        entry_mode == "vol_di_expand_trend"
+        and require_tk_state == "none"
+        and exit_mode == "bias_flip"
+        and regime_type == "none"
+        and not bool(entry_rules["require_chikou_confirmation"])
+        and entry_rules["chikou_mode"] == "close"
+    )
 
     if not (
         is_always_on
@@ -1242,6 +1278,7 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         or is_kumo_break
         or is_kijun_bounce
         or is_tenkan_bounce
+        or is_vol_di_expand_trend
     ):
         reasons.append(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
     if entry_rules["require_close_vs_cloud"] != "above_for_long_below_for_short":
@@ -1284,6 +1321,11 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
             "entry_rules.require_tk_state="
             f"{entry_rules['require_tk_state']!r} is not wired"
         )
+    if is_vol_di_expand_trend and require_tk_state != "none":
+        reasons.append(
+            "entry_rules.require_tk_state="
+            f"{entry_rules['require_tk_state']!r} is not wired"
+        )
     if is_tk_cloud_strong and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if is_plain_tk_cross and bool(entry_rules["require_chikou_confirmation"]):
@@ -1295,6 +1337,8 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     if is_kijun_bounce and not bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
     if is_tenkan_bounce and bool(entry_rules["require_chikou_confirmation"]):
+        reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
+    if is_vol_di_expand_trend and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if entry_rules["chikou_mode"] not in {"close", "strict"}:
         reasons.append(f"entry_rules.chikou_mode={entry_rules['chikou_mode']!r} is not wired")
@@ -1320,6 +1364,8 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         or "setup_bars" in entry_rules
     ):
         reasons.append("TK-strong refinement entry flags are only wired for tk_cloud_bias")
+    if is_vol_di_expand_trend:
+        reasons.extend(_unsupported_di_expansion_reasons(entry_rules))
     if is_always_on and exit_mode not in {
         "bias_flip",
         "time_stop",
@@ -1340,6 +1386,8 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     if is_kijun_bounce and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_tenkan_bounce and exit_mode != "flat_on_rule_fail":
+        reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
+    if is_vol_di_expand_trend and exit_mode != "bias_flip":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if exit_mode not in _TRAIL_EXIT_MODES and not bool(exit_rules["close_on_flat"]):
         reasons.append("exit_rules.close_on_flat=false is not wired")
@@ -1466,6 +1514,10 @@ def _entry_gate_provider(
     series: Any,
     cartridge: Mapping[str, Any],
 ) -> _EntryGateProvider | None:
+    entry_rules = _mapping(cartridge, "entry_rules")
+    if entry_rules["mode"] == "vol_di_expand_trend":
+        return _di_expansion_entry_gate_provider(candles, entry_rules=entry_rules)
+
     regime = _mapping(cartridge, "regime")
     regime_type = str(regime["type"])
 
@@ -1522,6 +1574,175 @@ def _entry_gate_provider(
         raise NotImplementedError(f"regime.type={regime_type!r} is not wired")
 
 
+def _di_expansion_entry_gate_provider(
+    candles: Sequence[Mapping[str, float | int | None]],
+    *,
+    entry_rules: Mapping[str, Any],
+) -> _EntryGateProvider:
+    config = _di_expansion_config(entry_rules)
+    directional = compute_directional_movement(candles, period=int(config["di_period"]))
+
+    def gate(index: int, side: Bias) -> Mapping[str, Any]:
+        if side == "flat":
+            return {"allowed": True, "reason": "di_expansion_not_applicable_flat_bias", "values": {}}
+        values = _di_expansion_gate_values(directional, index=index, config=config)
+        if not values["di_available"]:
+            return {"allowed": False, "reason": "di_spread_unavailable", "values": values}
+        if not values["di_spread_crossed_min"]:
+            return {"allowed": False, "reason": "di_spread_not_released", "values": values}
+        if not values["di_spread_delta_met"]:
+            return {"allowed": False, "reason": "di_spread_delta_below_min", "values": values}
+        return {"allowed": True, "reason": "di_expansion_release", "values": values}
+
+    return gate
+
+
+def _di_expansion_config(entry_rules: Mapping[str, Any]) -> dict[str, float | int]:
+    return {
+        "di_period": _positive_int(entry_rules.get("di_period"), "entry_rules.di_period"),
+        "di_spread_min": _positive_float(entry_rules.get("di_spread_min"), "entry_rules.di_spread_min"),
+        "di_spread_delta_min": _nonnegative_float(
+            entry_rules.get("di_spread_delta_min"),
+            "entry_rules.di_spread_delta_min",
+        ),
+        "di_expansion_lookback": _positive_int(
+            entry_rules.get("di_expansion_lookback"),
+            "entry_rules.di_expansion_lookback",
+        ),
+        "price_cloud_distance_atr_min": _nonnegative_float(
+            entry_rules.get("price_cloud_distance_atr_min"),
+            "entry_rules.price_cloud_distance_atr_min",
+        ),
+    }
+
+
+def _unsupported_di_expansion_reasons(entry_rules: Mapping[str, Any]) -> list[str]:
+    reasons = []
+    for field_name in (
+        "di_period",
+        "di_spread_min",
+        "di_spread_delta_min",
+        "di_expansion_lookback",
+        "price_cloud_distance_atr_min",
+    ):
+        if field_name not in entry_rules:
+            reasons.append(f"entry_rules.{field_name} is required for vol_di_expand_trend")
+    if reasons:
+        return reasons
+    try:
+        _di_expansion_config(entry_rules)
+    except ValueError as exc:
+        reasons.append(str(exc))
+    return reasons
+
+
+def _di_expansion_gate_values(
+    directional: Any,
+    *,
+    index: int,
+    config: Mapping[str, float | int],
+) -> dict[str, Any]:
+    values = _di_spread_values(
+        directional,
+        index=index,
+        lookback=int(config["di_expansion_lookback"]),
+    )
+    current = values["di_spread_abs"]
+    previous = values["previous_di_spread_abs"]
+    delta = values["di_spread_delta_abs"]
+    spread_min = float(config["di_spread_min"])
+    delta_min = float(config["di_spread_delta_min"])
+    values.update(
+        {
+            "di_period": config["di_period"],
+            "di_spread_min": spread_min,
+            "di_spread_delta_min": delta_min,
+            "di_expansion_lookback": config["di_expansion_lookback"],
+            "di_available": current is not None and previous is not None and delta is not None,
+            "di_spread_crossed_min": (
+                current is not None
+                and previous is not None
+                and previous < spread_min <= current
+            ),
+            "di_spread_delta_met": delta is not None and delta >= delta_min,
+        }
+    )
+    return values
+
+
+def _di_spread_values(directional: Any, *, index: int, lookback: int) -> dict[str, float | None]:
+    previous_index = index - lookback
+    plus_di = directional.plus_di[index]
+    minus_di = directional.minus_di[index]
+    previous_plus_di = directional.plus_di[previous_index] if previous_index >= 0 else None
+    previous_minus_di = directional.minus_di[previous_index] if previous_index >= 0 else None
+    di_spread = _optional_spread(plus_di, minus_di)
+    previous_di_spread = _optional_spread(previous_plus_di, previous_minus_di)
+    di_spread_abs = None if di_spread is None else abs(di_spread)
+    previous_di_spread_abs = None if previous_di_spread is None else abs(previous_di_spread)
+    di_spread_delta_abs = (
+        None
+        if di_spread_abs is None or previous_di_spread_abs is None
+        else di_spread_abs - previous_di_spread_abs
+    )
+    return {
+        "plus_di": plus_di,
+        "minus_di": minus_di,
+        "previous_plus_di": previous_plus_di,
+        "previous_minus_di": previous_minus_di,
+        "di_spread": di_spread,
+        "previous_di_spread": previous_di_spread,
+        "di_spread_abs": di_spread_abs,
+        "previous_di_spread_abs": previous_di_spread_abs,
+        "di_spread_delta_abs": di_spread_delta_abs,
+    }
+
+
+def _optional_spread(left: float | None, right: float | None) -> float | None:
+    if left is None or right is None:
+        return None
+    return float(left) - float(right)
+
+
+def _trend_side_from_snapshot(snapshot: RegimeSnapshot | None) -> Bias:
+    if snapshot is None:
+        return "flat"
+    if snapshot.state == RegimeState.TREND_BULL:
+        return "long"
+    if snapshot.state == RegimeState.TREND_BEAR:
+        return "short"
+    return "flat"
+
+
+def _signed_price_cloud_distance_atr(
+    *,
+    close: float,
+    cloud_top: float,
+    cloud_bottom: float,
+    atr: float | None,
+) -> float | None:
+    if atr is None or atr <= 0:
+        return None
+    if close > cloud_top:
+        return (close - cloud_top) / atr
+    if close < cloud_bottom:
+        return (close - cloud_bottom) / atr
+    return 0.0
+
+
+def _price_cloud_distance_confirms_side(
+    side: Bias,
+    distance_atr: float | None,
+    *,
+    min_distance: float,
+) -> bool:
+    if side == "flat" or distance_atr is None:
+        return False
+    if side == "long":
+        return distance_atr >= min_distance
+    return distance_atr <= -min_distance
+
+
 def _regime_entry_gate_provider(
     candles: Sequence[Mapping[str, Any]],
     *,
@@ -1530,7 +1751,66 @@ def _regime_entry_gate_provider(
     regime_htf: str | None,
     params: RegimeParams | None = None,
     source_candles: Sequence[Mapping[str, Any]] | None = None,
+    snapshot_provider: _RegimeSnapshotProvider | None = None,
 ) -> _EntryGateProvider:
+    resolved_params = params if params is not None else RegimeParams(regime_tf=regime_tf, htf_tf=regime_htf)
+    resolve_snapshot = snapshot_provider or _regime_snapshot_provider(
+        candles,
+        symbol=symbol,
+        regime_tf=regime_tf,
+        regime_htf=regime_htf,
+        params=resolved_params,
+        source_candles=source_candles,
+    )
+
+    def gate(index: int, side: Bias) -> Mapping[str, Any]:
+        if side == "flat":
+            return {
+                "allowed": True,
+                "reason": "regime_not_applicable_flat_bias",
+                "values": {},
+            }
+        snapshot = resolve_snapshot(index)
+        if snapshot is None:
+            allowed, reasons = regime_allows(side, None)
+            return {
+                "allowed": allowed,
+                "reason": reasons[0],
+                "values": {
+                    "side": side,
+                    "state": None,
+                    "as_of": None,
+                    "reasons": reasons,
+                },
+            }
+
+        allowed, reasons = regime_allows(side, snapshot.state)
+        return {
+            "allowed": allowed,
+            "reason": "regime_allows" if allowed else "regime_veto",
+            "values": {
+                "side": side,
+                "state": snapshot.state.value,
+                "as_of": snapshot.as_of,
+                "tf": snapshot.tf,
+                "confidence": _stable_float(snapshot.confidence),
+                "reasons": reasons,
+                "phase2_components": _phase2_component_state(resolved_params),
+            },
+        }
+
+    return gate
+
+
+def _regime_snapshot_provider(
+    candles: Sequence[Mapping[str, Any]],
+    *,
+    symbol: str,
+    regime_tf: str,
+    regime_htf: str | None,
+    params: RegimeParams | None = None,
+    source_candles: Sequence[Mapping[str, Any]] | None = None,
+) -> _RegimeSnapshotProvider:
     resolved_params = params if params is not None else RegimeParams(regime_tf=regime_tf, htf_tf=regime_htf)
     effective_htf = resolved_params.htf_tf if resolved_params.use_htf_veto else None
     regime_source_candles = source_candles if source_candles is not None else candles
@@ -1552,45 +1832,14 @@ def _regime_entry_gate_provider(
         if snapshot.as_of is not None
     ]
 
-    def gate(index: int, side: Bias) -> Mapping[str, Any]:
-        if side == "flat":
-            return {
-                "allowed": True,
-                "reason": "regime_not_applicable_flat_bias",
-                "values": {},
-            }
+    def resolve(index: int) -> RegimeSnapshot | None:
         bar_ts_ms = _candle_ts_ms(candles[index])
         snapshot_index = bisect_right(snapshot_as_of, bar_ts_ms) - 1
         if snapshot_index < 0:
-            allowed, reasons = regime_allows(side, None)
-            return {
-                "allowed": allowed,
-                "reason": reasons[0],
-                "values": {
-                    "side": side,
-                    "state": None,
-                    "as_of": None,
-                    "reasons": reasons,
-                },
-            }
+            return None
+        return indexed_snapshots[snapshot_index]
 
-        snapshot = indexed_snapshots[snapshot_index]
-        allowed, reasons = regime_allows(side, snapshot.state)
-        return {
-            "allowed": allowed,
-            "reason": "regime_allows" if allowed else "regime_veto",
-            "values": {
-                "side": side,
-                "state": snapshot.state.value,
-                "as_of": snapshot.as_of,
-                "tf": snapshot.tf,
-                "confidence": _stable_float(snapshot.confidence),
-                "reasons": reasons,
-                "phase2_components": _phase2_component_state(resolved_params),
-            },
-        }
-
-    return gate
+    return resolve
 
 
 def _confirm_entry_gate_provider(
@@ -2234,6 +2483,8 @@ def _signal_provider_for_cartridge(
     series: Any,
     *,
     cartridge: Mapping[str, Any],
+    candles: Sequence[Mapping[str, float | int | None]] | None = None,
+    regime_snapshot_provider: _RegimeSnapshotProvider | None = None,
 ) -> _SignalProvider:
     entry_rules = _mapping(cartridge, "entry_rules")
     chikou_mode = str(entry_rules["chikou_mode"])
@@ -2280,6 +2531,21 @@ def _signal_provider_for_cartridge(
         return lambda index: _kijun_bounce_signal_from_series(series, index=index)
     if entry_rules["mode"] == "tenkan_bounce":
         return lambda index: _tenkan_bounce_signal_from_series(series, index=index)
+    if entry_rules["mode"] == "vol_di_expand_trend":
+        if candles is None or regime_snapshot_provider is None:
+            raise ValueError("entry_rules.mode='vol_di_expand_trend' requires Phase 2 regime snapshots")
+        di_config = _di_expansion_config(entry_rules)
+        directional = compute_directional_movement(
+            candles,
+            period=int(di_config["di_period"]),
+        )
+        return lambda index: _vol_di_expand_trend_signal_from_series(
+            series,
+            index=index,
+            di_config=di_config,
+            directional=directional,
+            regime_snapshot_provider=regime_snapshot_provider,
+        )
     raise NotImplementedError(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
 
 
@@ -2411,6 +2677,105 @@ def _cloud_bias_signal_from_series(
         "senkou_span_a_displaced": span_a,
         "senkou_span_b_displaced": span_b,
         "chikou_mode": chikou_mode,
+    }
+    return IchimokuSignal(
+        ok=True,
+        reason=None,
+        bias=bias,
+        index=point.index,
+        ts_ms=point.ts_ms,
+        params=series.params,
+        components=components,
+        features=features,
+    )
+
+
+def _vol_di_expand_trend_signal_from_series(
+    series: Any,
+    *,
+    index: int,
+    di_config: Mapping[str, float | int],
+    directional: Any,
+    regime_snapshot_provider: _RegimeSnapshotProvider,
+) -> IchimokuSignal:
+    if not series.points:
+        return _empty_signal(series.params, "no_candles")
+    if not series.ok:
+        return _empty_signal(series.params, series.reason or "series_not_ready")
+
+    point = series.points[index]
+    required_components = (
+        point.senkou_span_a_displaced,
+        point.senkou_span_b_displaced,
+    )
+    if any(value is None for value in required_components):
+        return _empty_signal(series.params, "missing_ichimoku_components")
+
+    snapshot = regime_snapshot_provider(index)
+    trend_side = _trend_side_from_snapshot(snapshot)
+    span_a = _required_float(point.senkou_span_a_displaced, "senkou_span_a_displaced")
+    span_b = _required_float(point.senkou_span_b_displaced, "senkou_span_b_displaced")
+    cloud_top = max(span_a, span_b)
+    cloud_bottom = min(span_a, span_b)
+    close = point.close
+    atr = directional.atr[index]
+    di_values = _di_spread_values(directional, index=index, lookback=int(di_config["di_expansion_lookback"]))
+    price_cloud_distance_atr = _signed_price_cloud_distance_atr(
+        close=close,
+        cloud_top=cloud_top,
+        cloud_bottom=cloud_bottom,
+        atr=atr,
+    )
+    cloud_confirms_trend = _price_cloud_distance_confirms_side(
+        trend_side,
+        price_cloud_distance_atr,
+        min_distance=float(di_config["price_cloud_distance_atr_min"]),
+    )
+    di_release_active = (
+        di_values["di_spread_abs"] is not None
+        and di_values["di_spread_abs"] >= float(di_config["di_spread_min"])
+    )
+
+    features = {
+        "tk_filter_enabled": False,
+        "chikou_filter_enabled": False,
+        "trend_side_available": trend_side in {"long", "short"},
+        "di_spread_available": di_values["di_spread"] is not None,
+        "di_release_active": di_release_active,
+        "price_cloud_distance_confirmed": cloud_confirms_trend,
+        "bullish_rule": trend_side == "long" and di_release_active and cloud_confirms_trend,
+        "bearish_rule": trend_side == "short" and di_release_active and cloud_confirms_trend,
+    }
+    bias: Bias = "flat"
+    if features["bullish_rule"]:
+        bias = "long"
+    elif features["bearish_rule"]:
+        bias = "short"
+
+    components = {
+        "close": close,
+        "cloud_top": cloud_top,
+        "cloud_bottom": cloud_bottom,
+        "senkou_span_a_raw": point.senkou_span_a_raw,
+        "senkou_span_b_raw": point.senkou_span_b_raw,
+        "senkou_span_a_displaced": span_a,
+        "senkou_span_b_displaced": span_b,
+        "atr": atr,
+        "plus_di": di_values["plus_di"],
+        "minus_di": di_values["minus_di"],
+        "di_spread": di_values["di_spread"],
+        "di_spread_abs": di_values["di_spread_abs"],
+        "previous_di_spread_abs": di_values["previous_di_spread_abs"],
+        "di_spread_delta_abs": di_values["di_spread_delta_abs"],
+        "di_period": di_config["di_period"],
+        "di_spread_min": di_config["di_spread_min"],
+        "di_spread_delta_min": di_config["di_spread_delta_min"],
+        "di_expansion_lookback": di_config["di_expansion_lookback"],
+        "price_cloud_distance_atr": price_cloud_distance_atr,
+        "price_cloud_distance_atr_min": di_config["price_cloud_distance_atr_min"],
+        "regime_state": None if snapshot is None else snapshot.state.value,
+        "trend_side": trend_side,
+        "chikou_mode": "close",
     }
     return IchimokuSignal(
         ok=True,

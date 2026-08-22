@@ -59,7 +59,7 @@ Allowed `entry_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `tenkan_bounce`, `kumo_break`. |
+| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`, `tenkan_bounce`, `kumo_break`, `vol_di_expand_trend`. |
 | `allowed_sides` | list[enum] | Each item is `long` or `short`. |
 | `require_close_vs_cloud` | enum | `above_for_long_below_for_short`, `outside_cloud`, `none`. |
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
@@ -70,6 +70,11 @@ Allowed `entry_rules` keys:
 | `require_kijun_dip_setup` | bool | Optional TK-strong refinement. When `true`, a bullish TK reclaim requires at least one of the prior `setup_bars` to have Tenkan <= Kijun; short mirrors with Tenkan >= Kijun. |
 | `require_cloud_color_align` | bool | Optional TK-strong refinement. When `true`, long entries require displaced Span A > Span B and short entries require Span A < Span B. |
 | `setup_bars` | integer | Optional positive lookback for setup refinements such as `require_kijun_dip_setup`. |
+| `di_period` | integer | Required for `vol_di_expand_trend`; Wilder DI period reused from regime feature math. |
+| `di_spread_min` | number | Required for `vol_di_expand_trend`; absolute `+DI - -DI` release threshold. |
+| `di_spread_delta_min` | number | Required for `vol_di_expand_trend`; minimum absolute DI-spread increase over `di_expansion_lookback`. |
+| `di_expansion_lookback` | integer | Required for `vol_di_expand_trend`; lookback for the squeeze-to-release crossing. |
+| `price_cloud_distance_atr_min` | number | Required for `vol_di_expand_trend`; optional minimum ATR distance outside the Kumo in the current TREND direction. Use `0` for just outside. |
 
 `kumo_break` is a close-through-cloud breakout mode: long fires when the prior
 close was at or below the prior Kumo top and the current close is above the
@@ -108,6 +113,15 @@ cloud-side and TK-state gates, plus `cloud_bias` cartridges with
 `require_tk_state: none` and `require_chikou_confirmation: false`. These are
 paper-only state filters; Phase 2 thin-spine vetoes still come from explicit CLI
 flags such as `--regime-tf 4h --regime-htf 1d`, not from `regime.type`.
+
+`vol_di_expand_trend` is a post-IC event mode. Bias side comes from the active
+Phase 2 label (`TREND_BULL` -> long, `TREND_BEAR` -> short); non-`TREND_*`
+labels are flat. New entries require absolute DI spread to cross
+`di_spread_min` from below and expand by at least `di_spread_delta_min` over
+`di_expansion_lookback`. While in a position, bias remains active only while DI
+spread stays released and price remains outside the Kumo in the TREND direction,
+so the standard `bias_flip` exit can flatten on compression, cloud loss, or
+regime leave. This mode must not use Tenkan/Kijun/TK-spread as an entry trigger.
 
 ## Exit rule vocabulary
 

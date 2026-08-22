@@ -872,6 +872,7 @@ class EvalHarnessTests(TestCase):
             ("ichi_kumo_break_thin_v0", kumo_break_thin_cartridge()),
             ("ichi_always_on_tsmom_thin_v0", always_on_tsmom_thin_cartridge()),
             ("ichi_cloud_bias_tsmom_thin_v0", cloud_bias_tsmom_thin_cartridge()),
+            ("vol_di_expand_trend_v0", vol_di_expand_trend_cartridge()),
             ("ichi_params_20_60_trend_eth_dd_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             ("ichi_params_10_30_trend_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             ("ichi_tenkan_bounce_trend_v0", tenkan_bounce_cartridge()),
@@ -1006,6 +1007,61 @@ class EvalHarnessTests(TestCase):
         )
         self.assertFalse(cloud_bias_long["features"]["tk_filter_enabled"])
         self.assertNotIn("tenkan", cloud_bias_long["components"])
+
+    def test_vol_di_expand_trend_enters_on_trend_di_release(self):
+        candles = di_expansion_candles()
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.TREND_BULL),
+        ):
+            report = run_backtest_cartridge(
+                candles,
+                cartridge=vol_di_expand_trend_cartridge(),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertGreater(report["metrics"]["trade_count"], 0)
+        allowed_long_signals = [
+            signal
+            for signal in report["signals"]
+            if signal["bias"] == "long" and signal["entry_gate"]["allowed"]
+        ]
+        self.assertTrue(allowed_long_signals)
+        first_allowed = allowed_long_signals[0]
+        self.assertEqual("long", first_allowed["components"]["trend_side"])
+        self.assertEqual("TREND_BULL", first_allowed["components"]["regime_state"])
+        self.assertFalse(first_allowed["features"]["tk_filter_enabled"])
+        self.assertNotIn("tenkan", first_allowed["components"])
+        self.assertEqual(
+            "di_expansion_release",
+            first_allowed["entry_gate"]["values"]["cartridge_gate"]["reason"],
+        )
+
+    def test_vol_di_expand_trend_stays_flat_in_range_despite_di_release(self):
+        candles = di_expansion_candles()
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.RANGE),
+        ):
+            report = run_backtest_cartridge(
+                candles,
+                cartridge=vol_di_expand_trend_cartridge(),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertEqual(0, report["metrics"]["trade_count"])
+        self.assertEqual(0, report["metrics"]["bias_counts"]["long"])
+        self.assertTrue(all(signal["bias"] == "flat" for signal in report["signals"]))
 
     def test_kijun_bounce_cartridge_detects_cross_back_entry(self):
         closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
@@ -1586,6 +1642,29 @@ def cloud_bias_tsmom_thin_cartridge() -> dict:
     return cartridge
 
 
+def vol_di_expand_trend_cartridge() -> dict:
+    cartridge = fast_cartridge(
+        regime={"type": "none", "params": {}},
+        baseline_ref="ichi_cloud_bias_tsmom_thin_v0",
+        entry_rules={
+            "mode": "vol_di_expand_trend",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "none",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+            "di_period": 3,
+            "di_spread_min": 25.0,
+            "di_spread_delta_min": 10.0,
+            "di_expansion_lookback": 1,
+            "price_cloud_distance_atr_min": 0.0,
+        },
+    )
+    cartridge["id"] = "vol_di_expand_trend_v0"
+    cartridge["kill_criteria"]["baseline_metric"] = "atr_normalized_total_return"
+    return cartridge
+
+
 def kijun_bounce_cartridge() -> dict:
     return fast_cartridge(
         regime={"type": "none", "params": {}},
@@ -1624,6 +1703,20 @@ def tenkan_bounce_cartridge() -> dict:
             "max_bars_in_trade": None,
         },
     )
+
+
+def di_expansion_candles() -> list[dict[str, str | int]]:
+    closes = [100, 100, 100, 100, 100, 100, 101, 102, 108, 114, 120, 126]
+    return [
+        candle_ohlc(
+            index,
+            open_=close,
+            high=close + (8 if index >= 8 else 1),
+            low=close - 1,
+            close=close,
+        )
+        for index, close in enumerate(closes)
+    ]
 
 
 def regime_snapshots(count: int, state: RegimeState) -> list[RegimeSnapshot]:

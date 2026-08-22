@@ -1,0 +1,47 @@
+id: vol_di_expand_trend_v0
+title: Vol-event DI expansion under TREND thin-spine v0
+status: draft
+thesis: Test whether one-hour DI-spread expansion adds the missing expansion-versus-compression axis under frozen TREND_BULL/TREND_BEAR permissioning, with side taken from Phase-2 TREND state and no Tenkan/Kijun/TK-spread entry trigger.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichi_cloud_bias_tsmom_thin_v0
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: vol_di_expand_trend
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: none
+  require_chikou_confirmation: false
+  chikou_mode: close
+  di_period: 14
+  di_spread_min: 18.0
+  di_spread_delta_min: 6.0
+  di_expansion_lookback: 3
+  price_cloud_distance_atr_min: 0.0
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 40000
+  min_trades: 15
+  must_beat_baseline: true
+  baseline_metric: atr_normalized_total_return
+  notes: "CoS one-shot kill rule: vol_di_expand_trend_v0 in fee-aware 70/30 OOS on the frozen thin Phase-2 spine must beat champion_control ichi_cloud_bias_tsmom_thin_v0 on ATR-normalized total return for both PF_XBTUSD and PF_ETHUSD or die. Never revive killed ids; do not treat a screen survivor as Track A permission."
+sources:
+  - docs/LEDGER.md
+  - docs/EVAL.md
+  - docs/REGIME.md
+  - docs/briefs/2026-08-22-brain-change-sequence.md
+  - research/cartridges/SCHEMA.md
+notes: "Post-IC draft cartridge only; paper-only and not a runner. IC evidence path: /var/aura/evidence/evals/ic-screen-20260822/. Intern mill remains frozen; this is the CoS one-shot locked post-IC fork. Entry uses Phase-2 TREND_BULL/TREND_BEAR for side with thin-spine defaults HTF+width ON and ADX/dwell OFF via --regime-tf 4h --regime-htf 1d; width stays on here even though width is not a new entry trigger. DI expansion trigger is |+DI - -DI| crossing 18.0 from below and expanding by at least 6.0 over 3 bars, with price outside the Kumo in the TREND direction. Do not use adx, flat_*, kumo_width_atr, or tk_spread_atr as primary entry triggers. Bake-off on dexter with: export AURA_ROOT=/var/aura; for symbol in PF_XBTUSD PF_ETHUSD; do python3.12 -m runtime.tools.eval_run cartridge --id vol_di_expand_trend_v0 --symbol $symbol --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only --output-id vol-di-expand-trend-v0-$symbol; done"
