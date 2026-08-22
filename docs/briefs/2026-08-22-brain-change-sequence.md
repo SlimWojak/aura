@@ -41,6 +41,8 @@ Completed dexter evidence is banked at
 `price_cloud_distance_atr`, and `price_vs_kumo`; these are candidate features
 only, not Track A passes. One-symbol-only survivors are `future_twist`,
 `regime_state`, `thin_kumo`, and `tk_align`.
+Follow-on `vol_di_expand_trend_v0` (`vol-event@1h` DI expansion) was killed
+forever in the failed DI-expansion bake-off bank; 15m remains deferred.
 
 2. **Only after the IC screen, compare survivor-derived 15m impulse-under-TREND
    against `vol-event@1h`.**

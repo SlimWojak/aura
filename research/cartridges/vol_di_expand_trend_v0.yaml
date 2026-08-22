@@ -1,6 +1,6 @@
 id: vol_di_expand_trend_v0
 title: Vol-event DI expansion under TREND thin-spine v0
-status: draft
+status: killed
 thesis: Test whether one-hour DI-spread expansion adds the missing expansion-versus-compression axis under frozen TREND_BULL/TREND_BEAR permissioning, with side taken from Phase-2 TREND state and no Tenkan/Kijun/TK-spread entry trigger.
 symbol: PF_XBTUSD
 tf: 1h
@@ -37,11 +37,11 @@ kill_criteria:
   min_trades: 15
   must_beat_baseline: true
   baseline_metric: atr_normalized_total_return
-  notes: "CoS one-shot kill rule: vol_di_expand_trend_v0 in fee-aware 70/30 OOS on the frozen thin Phase-2 spine must beat champion_control ichi_cloud_bias_tsmom_thin_v0 on ATR-normalized total return for both PF_XBTUSD and PF_ETHUSD or die. Never revive killed ids; do not treat a screen survivor as Track A permission."
+  notes: "Killed forever by the 2026-08-22 failed DI-expansion bake-off in docs/LEDGER.md. Fee-aware 70/30 OOS under the frozen thin Phase-2 spine had to beat champion_control ichi_cloud_bias_tsmom_thin_v0 on ATR-normalized total return for both PF_XBTUSD and PF_ETHUSD. It lost both: PF_XBTUSD 1.29 versus champion 60.65; PF_ETHUSD 2.86 versus champion 97.61. Never revive this id; surviving the IC screen is not Track A permission."
 sources:
   - docs/LEDGER.md
   - docs/EVAL.md
   - docs/REGIME.md
   - docs/briefs/2026-08-22-brain-change-sequence.md
   - research/cartridges/SCHEMA.md
-notes: "Post-IC draft cartridge only; paper-only and not a runner. IC evidence path: /var/aura/evidence/evals/ic-screen-20260822/. Intern mill remains frozen; this is the CoS one-shot locked post-IC fork. Entry uses Phase-2 TREND_BULL/TREND_BEAR for side with thin-spine defaults HTF+width ON and ADX/dwell OFF via --regime-tf 4h --regime-htf 1d; width stays on here even though width is not a new entry trigger. DI expansion trigger is |+DI - -DI| crossing 18.0 from below and expanding by at least 6.0 over 3 bars, with price outside the Kumo in the TREND direction. Do not use adx, flat_*, kumo_width_atr, or tk_spread_atr as primary entry triggers. Bake-off on dexter with: export AURA_ROOT=/var/aura; for symbol in PF_XBTUSD PF_ETHUSD; do python3.12 -m runtime.tools.eval_run cartridge --id vol_di_expand_trend_v0 --symbol $symbol --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only --output-id vol-di-expand-trend-v0-$symbol; done"
+notes: "Killed forever after the 2026-08-22 failed DI-expansion bake-off at HEAD 507d840. Evidence: /var/aura/evidence/evals/vol-di-expand-20260822/ (logs/*.json and auto E-ichi-* dirs listed in those outputs). Flags: --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only. Thin-spine defaults were HTF+width ON and ADX/dwell OFF. PF_XBTUSD OOS ATR-normalized total_return 1.29 lost to champion_control ichi_cloud_bias_tsmom_thin_v0 60.65; PF_ETHUSD 2.86 lost to champion 97.61. Intern remains frozen; no control status changes, no Track A loosening, no 15m follow-on, and no live behavior."

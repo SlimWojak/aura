@@ -529,3 +529,28 @@ conventionally significant at BH `0.05`. This bank records evidence only: no
 cartridge YAML/status changes, no cartridge revival, no Intern unlock, no
 lower-timeframe ingest, no live scopes, and no Track A loosening. Intern remains
 frozen and Track A is unchanged.
+
+## 2026-08-22 failed DI-expansion bake-off
+
+Binding CoS verdict for `vol_di_expand_trend_v0` at main tip `507d840`.
+Evidence path: `/var/aura/evidence/evals/vol-di-expand-20260822/`
+(`logs/*.json` plus auto `E-ichi-*` dirs listed in those outputs).
+
+Run context: dexter paper, `AURA_ROOT=/var/aura`, thin Phase-2 spine
+(`--regime-tf 4h --regime-htf 1d`, HTF+width ON, ADX/dwell OFF),
+`--tf 1h --fee-bps 4 --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only`.
+
+Kill rule: `vol_di_expand_trend_v0` had to beat champion
+`ichi_cloud_bias_tsmom_thin_v0` on fee-aware OOS ATR-normalized
+`total_return` for both symbols. It lost both symbols, so the cartridge is
+forever killed.
+
+| Date | Cartridge id | Symbols | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `vol_di_expand_trend_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only` | 507d840 | dexter paper | OOS ATR total_return: XBT 1.29 vs champion 60.65; ETH 2.86 vs champion 97.61. | false | killed forever | Loses to `ichi_cloud_bias_tsmom_thin_v0` on both symbols; do not revive. |
+
+Status scope: this bank mutates only `vol_di_expand_trend_v0` to `killed`.
+`ichi_cloud_bias_tsmom_thin_v0` remains `champion_control`; scarred controls
+remain unchanged. Intern remains frozen, no control status churn, no Track A
+loosening, no live scopes, and the 15m survivor-derived follow-on remains
+deferred.
