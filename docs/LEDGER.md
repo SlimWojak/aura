@@ -1,8 +1,8 @@
 # Aura paper trial ledger
 
 Curator-freeze bank for CoS dexter paper runs. This ledger is the source of
-truth for the two banked trials below; no new entry families are introduced
-here. Curator freeze lifts only after this bank lands.
+truth for the banked trials below; no new entry families are introduced here.
+Curator freeze lifts only after this bank lands.
 
 Run context is repeated on every row as required. Full rows used
 `--regime-tf 4h --regime-htf 1d --fee-bps 4`; OOS rows also used
@@ -104,3 +104,30 @@ regime/funding/onchain changes, and no lower-TF changes. The parent
 | 2026-08-22 | `ichi_params_20_60_trend_long_only_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 47t; WR 0.4255; pnl_fee +1247.10912; max_dd 762.6. OOS: 17t; WR 0.1765; pnl_fee -500.28616; max_dd 783.6 | false | killed | ETH OOS fail. |
 | 2026-08-22 | `ichi_params_20_60_trend_regime_exit_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 109t; WR 0.3761; pnl_fee +8252.8276; max_dd 15064. OOS: 54t; WR 0.4444; pnl_fee -1552.9392; max_dd 12340 | false | killed | BTC OOS fee-negative and DD >12000. |
 | 2026-08-22 | `ichi_params_20_60_trend_regime_exit_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--regime-tf 4h --regime-htf 1d --fee-bps 4 --oos-split 0.7` | df9182a | dexter paper | IS: 95t; WR 0.4; pnl_fee +85.35216; max_dd 1204.1. OOS: 47t; WR 0.3617; pnl_fee -468.23276; max_dd 860.0 | false | killed | ETH fail. |
+
+## 2026-08-22 R6 Curator statuses
+
+Curator-confirmed R6 status bank for exact CoS dexter paper rows at HEAD
+`b69e633`, host dexter `~/aura`, `AURA_ROOT=/var/aura`. Rows used
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only`.
+This section banks statuses only: no new cartridges, no live scopes, no
+constellation/RIVER, no onchain, no lower-TF, no funding-in-classifier changes,
+no confirm-wiring edits, and no Intern unlock. The parent
+`ichi_params_20_60_trend_v0` remains kept as provisional paper only; no
+previously killed id is revived.
+
+### R6 chronological OOS rows
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_btc_confirm_eth_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 36t; pnl_fee +766.48; max_dd 507.5. OOS: 28t; pnl_fee +340.61; max_dd 753.1 | false | killed | OOS loses to fee-on regime-gated ETH baseline +420.02. IS beats baseline and OOS is positive; BTC confirm is not a no-op versus parent ETH 20/60 (36/28 trades versus 88/45), but must-beat OOS baseline fails. |
+| 2026-08-22 | `ichi_v0_trend_eth_primary_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 130t; pnl_fee +298.36; max_dd 857.2. OOS: 51t; pnl_fee +420.02; max_dd 624.0 | false | killed | Identical to regime-gated `ichi_v0_baseline` under same gates; cannot beat baseline. IS max_dd 857.2 > 500 gate. |
+| 2026-08-22 | `ichi_params_20_60_trend_long_only_n8_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 71t; pnl_fee +13097.14; max_dd 13353. OOS: 9t; pnl_fee +5557.89; max_dd 6839 | false | killed | BTC OOS beats XBT baseline and OOS DD <=12000, but IS max_dd 13353 >12000 fails the IS gate. |
+| 2026-08-22 | `ichi_params_20_60_trend_long_only_n8_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 47t; pnl_fee +1247.11; max_dd 762.6. OOS: 17t; pnl_fee -500.29; max_dd 783.6 | false | killed | ETH OOS is negative and loses to ETH baseline +420.02. This new id fails cartridge kill notes and does not revive the prior killed long_only id. |
+
+### R6 unchanged reference rows
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 88t; pnl_fee +478.56; max_dd 1269.5. OOS: 45t; pnl_fee -107.77; max_dd 883.5 | false | kept | Parent keep stays provisional paper; A does not supersede this kept id and this section does not mutate its cartridge. |
+| 2026-08-22 | `ichi_v0_baseline` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 130t; pnl_fee +298.36; max_dd 857.2. OOS: 51t; pnl_fee +420.02; max_dd 624.0 | n/a baseline ref | queued | Fee-on regime-gated ETH baseline reference for R6 comparisons; status is not changed. |

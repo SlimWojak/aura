@@ -264,6 +264,9 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(10, btc_confirm["kill_criteria"]["min_trades"])
         self.assertIn("no-op", btc_confirm["kill_criteria"]["notes"])
         self.assertIn("same-bar PF_XBTUSD", btc_confirm["notes"])
+        self.assertEqual("killed", btc_confirm["status"])
+        self.assertIn("docs/LEDGER.md", btc_confirm["sources"])
+        self.assertIn("must-beat OOS baseline", btc_confirm["kill_criteria"]["notes"])
 
         self.assertEqual("PF_ETHUSD", eth_primary["symbol"])
         self.assertEqual(9, eth_primary["ichimoku"]["tenkan"])
@@ -271,12 +274,18 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(500, eth_primary["kill_criteria"]["max_dd_points"])
         self.assertEqual(15, eth_primary["kill_criteria"]["min_trades"])
         self.assertIn("BTC is secondary", eth_primary["kill_criteria"]["notes"])
+        self.assertEqual("killed", eth_primary["status"])
+        self.assertIn("docs/LEDGER.md", eth_primary["sources"])
+        self.assertIn("Identical to fee-on regime-gated ichi_v0_baseline", eth_primary["notes"])
 
         self.assertEqual("PF_XBTUSD", long_only_n8["symbol"])
         self.assertEqual(["long"], long_only_n8["entry_rules"]["allowed_sides"])
         self.assertEqual(8, long_only_n8["kill_criteria"]["min_trades"])
         self.assertEqual(12000, long_only_n8["kill_criteria"]["max_dd_points"])
         self.assertIn("New id only", long_only_n8["kill_criteria"]["notes"])
+        self.assertEqual("killed", long_only_n8["status"])
+        self.assertIn("docs/LEDGER.md", long_only_n8["sources"])
+        self.assertIn("IS DD >12000", long_only_n8["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")
