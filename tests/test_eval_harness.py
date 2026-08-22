@@ -232,6 +232,29 @@ class EvalHarnessTests(TestCase):
         self.assertEqual(0, weak["metrics"]["trade_count"])
         self.assertIn("long", {trade["direction"] for trade in strong["trades"]})
 
+    def test_plain_tk_cross_uses_close_vs_cloud_without_both_lines_outside(self):
+        closes = [140, 140, 140, 140, 90, 110, 121, 122]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+
+        plain = run_backtest_cartridge(
+            candles,
+            cartridge=tk_cross_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        strong = run_backtest_cartridge(
+            candles,
+            cartridge=tk_cloud_strong_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(plain["metrics"]["trade_count"], 0)
+        self.assertEqual(0, strong["metrics"]["trade_count"])
+        long_signal = next(signal for signal in plain["signals"] if signal["bias"] == "long")
+        self.assertTrue(long_signal["features"]["tk_bull_cross"])
+        self.assertTrue(long_signal["features"]["close_above_cloud"])
+
     def test_tk_strong_refinement_filters_reduce_or_match_parent_trades(self):
         closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 110, 120, 130, 140, 150]
         candles = [candle(index, close) for index, close in enumerate(closes)]
@@ -310,6 +333,40 @@ class EvalHarnessTests(TestCase):
             any(signal["entry_gate"]["reason"] == "regime_veto" for signal in gated["signals"])
         )
 
+    def test_oos_baseline_ref_loads_ichi_v0_baseline_with_same_regime_gate(self):
+        closes = [100 + ((index % 24) - 12) + index * 0.1 for index in range(180)]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+        cartridge = fast_cartridge(
+            regime={"type": "none", "params": {}},
+            baseline_ref="ichi_v0_baseline",
+        )
+
+        def classify_side_effect(regime_candles, params, tf, htf_candles=None):
+            return regime_snapshots(len(regime_candles), RegimeState.TREND_BULL)
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            side_effect=classify_side_effect,
+        ) as classify_mock:
+            report = backtest_ichimoku.run_cartridge_oos_split(
+                candles,
+                cartridge=cartridge,
+                symbol="PF_XBTUSD",
+                tf="1h",
+                fee_bps=4,
+                regime_tf="1h",
+                regime_htf=None,
+                oos_split=0.5,
+            )
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(4, classify_mock.call_count)
+        self.assertEqual("ichi_v0_baseline", report["baseline"]["ref"])
+        self.assertEqual("ichi_v0_baseline", report["baseline"]["is"]["cartridge"]["id"])
+        self.assertEqual(4, report["baseline"]["is"]["fee_bps"])
+        self.assertIn("regime_gate", report["baseline"]["is"])
+
     def test_phase2_regime_gate_side_locks_trend_states(self):
         closes = [140 - index for index in range(96)]
         candles = [candle(index, close) for index, close in enumerate(closes)]
@@ -349,6 +406,18 @@ class EvalHarnessTests(TestCase):
                 tf="1h",
             )
 
+    def test_new_trend_family_cartridge_requires_regime_flag(self):
+        cartridge = tk_cross_cartridge()
+        cartridge["id"] = "ichi_tk_cross_trend_v0"
+
+        with self.assertRaisesRegex(ValueError, "requires --regime-tf"):
+            run_backtest_cartridge(
+                [candle(index, 100 + index) for index in range(96)],
+                cartridge=cartridge,
+                symbol="PF_XBTUSD",
+                tf="1h",
+            )
+
     def test_kijun_bounce_cartridge_detects_cross_back_entry(self):
         closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
         report = run_backtest_cartridge(
@@ -362,6 +431,21 @@ class EvalHarnessTests(TestCase):
         self.assertIn("long", {trade["direction"] for trade in report["trades"]})
         long_signals = [signal for signal in report["signals"] if signal["bias"] == "long"]
         self.assertTrue(long_signals)
+
+    def test_kumo_break_cartridge_detects_close_through_cloud(self):
+        closes = [140, 140, 140, 140, 90, 110, 121, 122]
+        report = run_backtest_cartridge(
+            [candle(index, close) for index, close in enumerate(closes)],
+            cartridge=kumo_break_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(report["metrics"]["trade_count"], 0)
+        self.assertIn("long", {trade["direction"] for trade in report["trades"]})
+        long_signal = next(signal for signal in report["signals"] if signal["bias"] == "long")
+        self.assertTrue(long_signal["features"]["previous_close_at_or_below_cloud_top"])
+        self.assertTrue(long_signal["features"]["close_above_cloud"])
 
     def test_signal_for_closed_bar_ignores_future_candle_mutation(self):
         candles = [candle(index, 100 + index) for index in range(12)]
@@ -568,6 +652,7 @@ def candle(index: int, close: int | float) -> dict[str, str | int]:
 def fast_cartridge(
     *,
     regime: dict,
+    baseline_ref: str = "ichimoku_v0",
     entry_rules: dict | None = None,
     exit_rules: dict | None = None,
 ) -> dict:
@@ -578,7 +663,7 @@ def fast_cartridge(
         "thesis": "Test cartridge",
         "symbol": "PF_XBTUSD",
         "tf": "1h",
-        "baseline_ref": "ichimoku_v0",
+        "baseline_ref": baseline_ref,
         "ichimoku": {
             "tenkan": FAST_PARAMS.tenkan,
             "kijun": FAST_PARAMS.kijun,
@@ -625,6 +710,46 @@ def tk_cloud_strong_cartridge(entry_rule_overrides: dict | None = None) -> dict:
     return fast_cartridge(
         regime={"type": "none", "params": {}},
         entry_rules=entry_rules,
+        exit_rules={
+            "mode": "flat_on_rule_fail",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        },
+    )
+
+
+def tk_cross_cartridge() -> dict:
+    return fast_cartridge(
+        regime={"type": "none", "params": {}},
+        entry_rules={
+            "mode": "tk_cross",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "tk_cross_only",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+        },
+        exit_rules={
+            "mode": "flat_on_rule_fail",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        },
+    )
+
+
+def kumo_break_cartridge() -> dict:
+    return fast_cartridge(
+        regime={"type": "none", "params": {}},
+        entry_rules={
+            "mode": "kumo_break",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "none",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+        },
         exit_rules={
             "mode": "flat_on_rule_fail",
             "close_on_flat": True,
