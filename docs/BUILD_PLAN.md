@@ -27,7 +27,7 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 | Tool | Status | Role |
 |---|---|---|
 | Droid (Factory) | **Installed** 0.120.1 | On-box implementer near `/var/aura` |
-| Claude Code CLI | Home dir present, **CLI missing** | Deep implement / review on dexter |
+| Claude Code CLI | **Installed** 2.1.239 (auth OK) | Deep implement / review on dexter |
 | Codex CLI | Missing | Optional third; install if diversity needed |
 | Cursor IDE/CLI | Missing | Skip on dexter; use cloud agents for PRs |
 | Kraken CLI | Installed | Spot MCP `market,paper`; futures paper CLI-only |
@@ -35,8 +35,8 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 ## Build phases (lean)
 
 ### P0 — Agent workplace ops (now → days)
-1. Install **Claude Code CLI** on dexter; verify paper-only prompts / no live scopes.
-2. Document Droid + Claude invoke recipes in `ops/delegates.md`.
+1. [x] Install **Claude Code CLI** on dexter (2.1.239, logged in).
+2. [x] Document Droid + Claude invoke recipes in `ops/delegates.md`.
 3. Optional: install Codex on dexter if first Claude+Droid week feels thin.
 4. Create standing Grok seats **only when needed**: Risk/Ops, Eval/Scribe (not before runtime stubs run).
 
@@ -76,7 +76,7 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 
 ## Next concrete actions (ordered)
 
-1. Install Claude CLI on dexter and smoke `claude --version` from SSH.
-2. Add `ops/delegates.md` with exact Droid/Claude invocation patterns for aura.
+1. [x] Install Claude CLI on dexter and smoke version from SSH.
+2. [x] Add `ops/delegates.md`.
 3. Cloud-agent PR: P1 risk-gate stub + JSONL writer (no strategy).
 4. First supervised runner loop (still human-triggered).
