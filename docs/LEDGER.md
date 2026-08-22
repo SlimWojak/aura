@@ -272,3 +272,51 @@ HTF+width-only thin baseline rerun below.
 | 2026-08-22 | `ichi_kumo_break_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR -15.91 < thin baseline 43.74. XBT OOS ATR -1.92 > thin baseline -7.33, but IS failed the IS+OOS beat gate. ETH also failed. | false | killed | Killed forever. Do not revive `ichi_kumo_break_thin_v0` or the older killed `ichi_kumo_break_trend_v0`. |
 | 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR 64.55 and OOS ATR 4.60 beat thin baseline 43.74 and -7.33. ETH OOS ATR 34.92 lost to thin baseline 38.02. maxDD pts OK. | true on XBT | kept | Kept provisional paper only; not live. Same BTC-primary scar pattern as prior keeps; ETH remains secondary context. |
 | 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS/OOS ATR 120.35/60.65 beat thin baseline 43.74/-7.33. ETH IS/OOS ATR 190.88/97.61 beat thin baseline 133.30/38.02. Not no-op versus always_on: XBT trades 362 vs 338, overlap 78. | true | kept | Kept provisional paper only; not live. Strongest R7 candidate, but no autopromote. |
+
+## 2026-08-22 R7 DSR/PBO honesty rescore
+
+CoS/Curator R7 DSR/PBO honesty rescore for provisional paper keeps
+`ichi_always_on_tsmom_thin_v0` and `ichi_cloud_bias_tsmom_thin_v0` at commit
+`5005ba3d9ed11f18bc7a686ef056787c83b50438`, host dexter,
+`AURA_ROOT=/var/aura`. Rows used the thin Phase-2 spine: HTF+width on,
+ADX/dwell off, with flags
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only`.
+Evidence path:
+`/var/aura/evidence/evals/r7-dsr-pbo-20260822/`.
+
+This section banks the honesty rescore only: no cartridge status mutation, no
+new cartridges, no live scopes, no constellation/RIVER, no runtime state, and
+no previously killed id is revived. The two R7 keep YAML statuses remain
+`kept` as provisional paper only; no forever-kill decision is recorded here.
+`ichi_kumo_break_thin_v0` remains killed, and
+`ichi_params_20_60_trend_v0` is untouched.
+
+### R7 DSR/PBO baseline references
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_v0_baseline` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total -7.3311; DSR 0.0071 | n/a baseline ref | reference | Thin-spine baseline for R7 honesty comparison. |
+| 2026-08-22 | `ichi_v0_baseline` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 38.0179; DSR 0.2434 | n/a baseline ref | reference | Thin-spine baseline for R7 honesty comparison. |
+
+### R7 DSR/PBO rescore rows
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | Track A gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 4.5977 beats thin baseline -7.3311; DSR 0.0236 | false | provisional-fail | DSR fails `> 0.95`; candidate also fails the both-symbol gate because ETH loses to the thin baseline and ETH/Mixed PBO fail. YAML remains `kept` provisional paper only. |
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 34.9233 loses to thin baseline 38.0179; DSR 0.2027 | false | provisional-fail | DSR fails `> 0.95`; ETH OOS ATR loses to baseline and ETH PBO fails. YAML remains `kept` provisional paper only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 60.6522 beats thin baseline -7.3311; DSR 0.3432 | false | provisional-fail | ATR beats, but DSR fails `> 0.95`; ETH/Mixed PBO fail the Track A gate. YAML remains `kept` provisional paper only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 97.6087 beats thin baseline 38.0179; DSR 0.7289 | false | provisional-fail | ATR beats, but DSR fails `> 0.95` and ETH PBO fails. YAML remains `kept` provisional paper only. |
+
+### R7 DSR/PBO matrix
+
+| Date | Universe | Metric | CSCV groups | Runnable paths | N_honest | PBO | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | BTC | atr_normalized | 8 | 4 | 37 | 0.0000 | pass | Passes strict PBO <0.10. PBO pass alone is insufficient without DSR >0.95 and both-symbol OOS ATR beat. |
+| 2026-08-22 | ETH | atr_normalized | 8 | 4 | 37 | 0.3429 | provisional-fail | Fails strict PBO <0.10. |
+| 2026-08-22 | Mixed BTC+ETH | atr_normalized | 8 | 8 | 37 | 0.1286 | provisional-fail | Fails strict PBO <0.10. |
+
+Track A gate for this R7 honesty bank is `DSR > 0.95 AND PBO < 0.10 AND
+beats baseline ATR on BOTH symbols`. CoS/Curator disposition is
+**provisional-fail** for both `kept` R7 TSMOM cartridges. The cartridge YAML
+statuses remain provisional paper `kept`; no forever-kill decision is made, no
+live behavior is added, and no killed id is revived.
