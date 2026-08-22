@@ -17,10 +17,13 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(
             {
                 "ichi_adx_regime_v0",
+                "ichi_always_on_tsmom_thin_v0",
                 "ichi_chikou_open_space_v0",
                 "ichi_cloud_thickness_v0",
+                "ichi_cloud_bias_tsmom_thin_v0",
                 "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
+                "ichi_kumo_break_thin_v0",
                 "ichi_kumo_break_trend_v0",
                 "ichi_p2_ab0_eth_v0",
                 "ichi_p2_ab0_xbt_v0",
@@ -354,6 +357,59 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(14, atr_stop["exit_rules"]["atr_period"])
         self.assertEqual(3.0, atr_stop["exit_rules"]["atr_mult"])
         self.assertIn("trades were 4 < 12", atr_stop["kill_criteria"]["notes"])
+
+    def test_round_seven_research_intern_thin_spine_cartridges_load_requested_modes(self):
+        kumo_break = load_cartridge(CARTRIDGE_ROOT / "ichi_kumo_break_thin_v0.yaml")
+        always_on = load_cartridge(CARTRIDGE_ROOT / "ichi_always_on_tsmom_thin_v0.yaml")
+        cloud_bias = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_bias_tsmom_thin_v0.yaml")
+
+        for cartridge in (kumo_break, always_on, cloud_bias):
+            with self.subTest(cartridge=cartridge["id"]):
+                self.assertEqual("draft", cartridge["status"])
+                self.assertEqual("PF_XBTUSD", cartridge["symbol"])
+                self.assertEqual("ichi_v0_baseline", cartridge["baseline_ref"])
+                self.assertEqual(
+                    {
+                        "tenkan": 9,
+                        "kijun": 26,
+                        "senkou_b": 52,
+                        "displacement": 26,
+                    },
+                    cartridge["ichimoku"],
+                )
+                self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
+                self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
+                self.assertEqual(
+                    "atr_normalized_total_return",
+                    cartridge["kill_criteria"]["baseline_metric"],
+                )
+                self.assertIn("--regime-tf 4h --regime-htf 1d", cartridge["notes"])
+                self.assertIn("--oos-split 0.7 --atr-period 14", cartridge["notes"])
+                self.assertIn("PF_ETHUSD is secondary eval context only", cartridge["notes"])
+
+        self.assertEqual("kumo_break", kumo_break["entry_rules"]["mode"])
+        self.assertEqual("none", kumo_break["entry_rules"]["require_tk_state"])
+        self.assertFalse(kumo_break["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn(
+            "Never revive ichi_kumo_break_trend_v0",
+            kumo_break["kill_criteria"]["notes"],
+        )
+
+        self.assertEqual("always_on", always_on["entry_rules"]["mode"])
+        self.assertEqual(
+            "tenkan_over_kijun_for_long_under_for_short",
+            always_on["entry_rules"]["require_tk_state"],
+        )
+        self.assertFalse(always_on["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn("CLI Phase-2 hard veto only", always_on["kill_criteria"]["notes"])
+
+        self.assertEqual("cloud_bias", cloud_bias["entry_rules"]["mode"])
+        self.assertEqual("none", cloud_bias["entry_rules"]["require_tk_state"])
+        self.assertFalse(cloud_bias["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn(
+            "Kill if trade set identical to ichi_always_on_tsmom_thin_v0",
+            cloud_bias["kill_criteria"]["notes"],
+        )
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")

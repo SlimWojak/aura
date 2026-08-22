@@ -63,6 +63,9 @@ _PHASE2_REGIME_REQUIRED_CARTRIDGES = {
     "ichi_params_20_60_trend_regime_exit_v0",
     "ichi_tk_cross_trend_v0",
     "ichi_kumo_break_trend_v0",
+    "ichi_kumo_break_thin_v0",
+    "ichi_always_on_tsmom_thin_v0",
+    "ichi_cloud_bias_tsmom_thin_v0",
     "ichi_params_20_60_trend_btc_confirm_eth_v0",
     "ichi_v0_trend_eth_primary_v0",
     "ichi_params_20_60_trend_long_only_n8_v0",
@@ -1039,6 +1042,13 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     exit_mode = str(exit_rules["mode"])
     regime_type = str(regime["type"])
     is_always_on = entry_mode == "always_on"
+    is_cloud_bias = (
+        entry_mode == "cloud_bias"
+        and require_tk_state == "none"
+        and exit_mode == "bias_flip"
+        and regime_type == "none"
+        and not bool(entry_rules["require_chikou_confirmation"])
+    )
     is_tk_cloud_strong = (
         entry_mode == "tk_cloud_bias"
         and require_tk_state == "tk_cross_only"
@@ -1056,7 +1066,7 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
     is_kumo_break = (
         entry_mode == "kumo_break"
         and require_tk_state == "none"
-        and exit_mode == "flat_on_rule_fail"
+        and exit_mode in {"bias_flip", "flat_on_rule_fail"}
         and regime_type == "none"
         and not bool(entry_rules["require_chikou_confirmation"])
     )
@@ -1081,6 +1091,7 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         is_always_on
         or is_tk_cloud_strong
         or is_plain_tk_cross
+        or is_cloud_bias
         or is_kumo_break
         or is_kijun_bounce
         or is_tenkan_bounce
@@ -1111,6 +1122,11 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
             "entry_rules.require_tk_state="
             f"{entry_rules['require_tk_state']!r} is not wired"
         )
+    if is_cloud_bias and require_tk_state != "none":
+        reasons.append(
+            "entry_rules.require_tk_state="
+            f"{entry_rules['require_tk_state']!r} is not wired"
+        )
     if is_kijun_bounce and require_tk_state != "none":
         reasons.append(
             "entry_rules.require_tk_state="
@@ -1121,11 +1137,11 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
             "entry_rules.require_tk_state="
             f"{entry_rules['require_tk_state']!r} is not wired"
         )
-    if is_always_on and not bool(entry_rules["require_chikou_confirmation"]):
-        reasons.append("entry_rules.require_chikou_confirmation=false is not wired")
     if is_tk_cloud_strong and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if is_plain_tk_cross and bool(entry_rules["require_chikou_confirmation"]):
+        reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
+    if is_cloud_bias and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
     if is_kumo_break and bool(entry_rules["require_chikou_confirmation"]):
         reasons.append("entry_rules.require_chikou_confirmation=true is not wired")
@@ -1170,7 +1186,9 @@ def unsupported_cartridge_reasons(cartridge: Mapping[str, Any]) -> list[str]:
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_plain_tk_cross and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
-    if is_kumo_break and exit_mode != "flat_on_rule_fail":
+    if is_cloud_bias and exit_mode != "bias_flip":
+        reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
+    if is_kumo_break and exit_mode not in {"bias_flip", "flat_on_rule_fail"}:
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
     if is_kijun_bounce and exit_mode != "flat_on_rule_fail":
         reasons.append(f"exit_rules.mode={exit_rules['mode']!r} is not wired")
@@ -1938,10 +1956,25 @@ def _signal_provider_for_cartridge(
     entry_rules = _mapping(cartridge, "entry_rules")
     chikou_mode = str(entry_rules["chikou_mode"])
     if entry_rules["mode"] == "always_on":
-        return lambda index: signal_from_series(
+        if bool(entry_rules["require_chikou_confirmation"]):
+            return lambda index: signal_from_series(
+                series,
+                index=index,
+                chikou_mode=chikou_mode,  # type: ignore[arg-type]
+            )
+        return lambda index: _cloud_tk_state_signal_from_series(
             series,
             index=index,
-            chikou_mode=chikou_mode,  # type: ignore[arg-type]
+            chikou_mode=chikou_mode,
+        )
+    if (
+        entry_rules["mode"] == "cloud_bias"
+        and entry_rules["require_tk_state"] == "none"
+    ):
+        return lambda index: _cloud_bias_signal_from_series(
+            series,
+            index=index,
+            chikou_mode=chikou_mode,
         )
     if (
         entry_rules["mode"] == "tk_cloud_bias"
@@ -1966,6 +1999,147 @@ def _signal_provider_for_cartridge(
     if entry_rules["mode"] == "tenkan_bounce":
         return lambda index: _tenkan_bounce_signal_from_series(series, index=index)
     raise NotImplementedError(f"entry_rules.mode={entry_rules['mode']!r} is not wired")
+
+
+def _cloud_tk_state_signal_from_series(
+    series: Any,
+    *,
+    index: int,
+    chikou_mode: str,
+) -> IchimokuSignal:
+    if not series.points:
+        return _empty_signal(series.params, "no_candles")
+    if not series.ok:
+        return _empty_signal(series.params, series.reason or "series_not_ready")
+
+    point = series.points[index]
+    required_components = (
+        point.tenkan,
+        point.kijun,
+        point.senkou_span_a_displaced,
+        point.senkou_span_b_displaced,
+    )
+    if any(value is None for value in required_components):
+        return _empty_signal(series.params, "missing_ichimoku_components")
+
+    tenkan = _required_float(point.tenkan, "tenkan")
+    kijun = _required_float(point.kijun, "kijun")
+    span_a = _required_float(point.senkou_span_a_displaced, "senkou_span_a_displaced")
+    span_b = _required_float(point.senkou_span_b_displaced, "senkou_span_b_displaced")
+    cloud_top = max(span_a, span_b)
+    cloud_bottom = min(span_a, span_b)
+    close = point.close
+
+    features = {
+        "has_cloud": True,
+        "close_above_cloud": close > cloud_top,
+        "close_below_cloud": close < cloud_bottom,
+        "tenkan_above_kijun": tenkan > kijun,
+        "tenkan_below_kijun": tenkan < kijun,
+        "chikou_filter_enabled": False,
+        "chikou_mode_close": chikou_mode == "close",
+        "chikou_mode_strict": chikou_mode == "strict",
+    }
+    features["bullish_rule"] = (
+        features["close_above_cloud"] and features["tenkan_above_kijun"]
+    )
+    features["bearish_rule"] = (
+        features["close_below_cloud"] and features["tenkan_below_kijun"]
+    )
+
+    bias: Bias = "flat"
+    if features["bullish_rule"]:
+        bias = "long"
+    elif features["bearish_rule"]:
+        bias = "short"
+
+    components = {
+        "close": close,
+        "cloud_top": cloud_top,
+        "cloud_bottom": cloud_bottom,
+        "tenkan": tenkan,
+        "kijun": kijun,
+        "senkou_span_a_raw": point.senkou_span_a_raw,
+        "senkou_span_b_raw": point.senkou_span_b_raw,
+        "senkou_span_a_displaced": span_a,
+        "senkou_span_b_displaced": span_b,
+        "chikou_mode": chikou_mode,
+    }
+    return IchimokuSignal(
+        ok=True,
+        reason=None,
+        bias=bias,
+        index=point.index,
+        ts_ms=point.ts_ms,
+        params=series.params,
+        components=components,
+        features=features,
+    )
+
+
+def _cloud_bias_signal_from_series(
+    series: Any,
+    *,
+    index: int,
+    chikou_mode: str,
+) -> IchimokuSignal:
+    if not series.points:
+        return _empty_signal(series.params, "no_candles")
+    if not series.ok:
+        return _empty_signal(series.params, series.reason or "series_not_ready")
+
+    point = series.points[index]
+    required_components = (
+        point.senkou_span_a_displaced,
+        point.senkou_span_b_displaced,
+    )
+    if any(value is None for value in required_components):
+        return _empty_signal(series.params, "missing_ichimoku_components")
+
+    span_a = _required_float(point.senkou_span_a_displaced, "senkou_span_a_displaced")
+    span_b = _required_float(point.senkou_span_b_displaced, "senkou_span_b_displaced")
+    cloud_top = max(span_a, span_b)
+    cloud_bottom = min(span_a, span_b)
+    close = point.close
+
+    features = {
+        "has_cloud": True,
+        "close_above_cloud": close > cloud_top,
+        "close_below_cloud": close < cloud_bottom,
+        "tk_filter_enabled": False,
+        "chikou_filter_enabled": False,
+        "chikou_mode_close": chikou_mode == "close",
+        "chikou_mode_strict": chikou_mode == "strict",
+    }
+    features["bullish_rule"] = features["close_above_cloud"]
+    features["bearish_rule"] = features["close_below_cloud"]
+
+    bias: Bias = "flat"
+    if features["bullish_rule"]:
+        bias = "long"
+    elif features["bearish_rule"]:
+        bias = "short"
+
+    components = {
+        "close": close,
+        "cloud_top": cloud_top,
+        "cloud_bottom": cloud_bottom,
+        "senkou_span_a_raw": point.senkou_span_a_raw,
+        "senkou_span_b_raw": point.senkou_span_b_raw,
+        "senkou_span_a_displaced": span_a,
+        "senkou_span_b_displaced": span_b,
+        "chikou_mode": chikou_mode,
+    }
+    return IchimokuSignal(
+        ok=True,
+        reason=None,
+        bias=bias,
+        index=point.index,
+        ts_ms=point.ts_ms,
+        params=series.params,
+        components=components,
+        features=features,
+    )
 
 
 def _tk_cloud_strong_signal_from_series(

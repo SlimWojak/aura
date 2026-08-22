@@ -766,6 +766,9 @@ class EvalHarnessTests(TestCase):
     def test_new_trend_family_cartridge_requires_regime_flag(self):
         cartridges = [
             ("ichi_tk_cross_trend_v0", tk_cross_cartridge()),
+            ("ichi_kumo_break_thin_v0", kumo_break_thin_cartridge()),
+            ("ichi_always_on_tsmom_thin_v0", always_on_tsmom_thin_cartridge()),
+            ("ichi_cloud_bias_tsmom_thin_v0", cloud_bias_tsmom_thin_cartridge()),
             ("ichi_params_20_60_trend_eth_dd_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             ("ichi_params_10_30_trend_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             ("ichi_tenkan_bounce_trend_v0", tenkan_bounce_cartridge()),
@@ -839,6 +842,67 @@ class EvalHarnessTests(TestCase):
                         symbol="PF_XBTUSD",
                         tf="1h",
                     )
+
+    def test_thin_research_intern_cartridges_run_with_regime_flag(self):
+        candles = [candle(index, 100 + index) for index in range(96)]
+        cartridges = [
+            kumo_break_thin_cartridge(),
+            always_on_tsmom_thin_cartridge(),
+            cloud_bias_tsmom_thin_cartridge(),
+        ]
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.TREND_BULL),
+        ):
+            for cartridge in cartridges:
+                with self.subTest(cartridge=cartridge["id"]):
+                    self.assertEqual(
+                        [],
+                        backtest_ichimoku.unsupported_cartridge_reasons(cartridge),
+                    )
+
+                    report = run_backtest_cartridge(
+                        candles,
+                        cartridge=cartridge,
+                        symbol="PF_XBTUSD",
+                        tf="1h",
+                        regime_tf="1h",
+                        regime_htf=None,
+                    )
+
+                    self.assertTrue(report["ok"])
+                    self.assertEqual(cartridge["id"], report["cartridge"]["id"])
+                    self.assertTrue(report["regime_gate"]["enabled"])
+
+        always_on_report = run_backtest_cartridge(
+            candles,
+            cartridge=always_on_tsmom_thin_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+            regime_tf="1h",
+            regime_htf=None,
+        )
+        always_on_long = next(
+            signal for signal in always_on_report["signals"] if signal["bias"] == "long"
+        )
+        self.assertFalse(always_on_long["features"]["chikou_filter_enabled"])
+        self.assertIn("tenkan", always_on_long["components"])
+
+        cloud_bias_report = run_backtest_cartridge(
+            candles,
+            cartridge=cloud_bias_tsmom_thin_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+            regime_tf="1h",
+            regime_htf=None,
+        )
+        cloud_bias_long = next(
+            signal for signal in cloud_bias_report["signals"] if signal["bias"] == "long"
+        )
+        self.assertFalse(cloud_bias_long["features"]["tk_filter_enabled"])
+        self.assertNotIn("tenkan", cloud_bias_long["components"])
 
     def test_kijun_bounce_cartridge_detects_cross_back_entry(self):
         closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
@@ -1251,6 +1315,55 @@ def kumo_break_cartridge() -> dict:
             "max_bars_in_trade": None,
         },
     )
+
+
+def kumo_break_thin_cartridge() -> dict:
+    cartridge = kumo_break_cartridge()
+    cartridge["id"] = "ichi_kumo_break_thin_v0"
+    cartridge["exit_rules"] = {
+        "mode": "bias_flip",
+        "close_on_flat": True,
+        "close_on_opposite": True,
+        "max_bars_in_trade": None,
+    }
+    cartridge["kill_criteria"]["baseline_metric"] = "atr_normalized_total_return"
+    return cartridge
+
+
+def always_on_tsmom_thin_cartridge() -> dict:
+    cartridge = fast_cartridge(
+        regime={"type": "none", "params": {}},
+        baseline_ref="ichi_v0_baseline",
+        entry_rules={
+            "mode": "always_on",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "tenkan_over_kijun_for_long_under_for_short",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+        },
+    )
+    cartridge["id"] = "ichi_always_on_tsmom_thin_v0"
+    cartridge["kill_criteria"]["baseline_metric"] = "atr_normalized_total_return"
+    return cartridge
+
+
+def cloud_bias_tsmom_thin_cartridge() -> dict:
+    cartridge = fast_cartridge(
+        regime={"type": "none", "params": {}},
+        baseline_ref="ichi_v0_baseline",
+        entry_rules={
+            "mode": "cloud_bias",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "none",
+            "require_chikou_confirmation": False,
+            "chikou_mode": "close",
+        },
+    )
+    cartridge["id"] = "ichi_cloud_bias_tsmom_thin_v0"
+    cartridge["kill_criteria"]["baseline_metric"] = "atr_normalized_total_return"
+    return cartridge
 
 
 def kijun_bounce_cartridge() -> dict:
