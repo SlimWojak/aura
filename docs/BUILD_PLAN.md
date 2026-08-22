@@ -41,8 +41,8 @@ CoS road-test and eval honesty beat PnL until that loop is boringly reliable.
 4. Create standing Grok seats **only when needed**: Risk/Ops, Eval/Scribe (not before runtime stubs run).
 
 ### P1 — Thin paper runtime (next)
-1. `runtime/risk` — admit/reject against RISK_POLICY.md (no LLM in the gate).
-2. `runtime/runner` — propose → gate → `kraken futures paper` → append decision JSONL under `/var/aura/evidence`.
+1. [x] `runtime/risk` stub — admit/reject against RISK_POLICY.md (no LLM in the gate).
+2. [x] `runtime/evidence` + smoke stub — future runner can gate proposals and append decision JSONL; full `runtime/runner` still pending.
 3. `runtime/scribe` — daily one-pager from JSONL (template already exists).
 4. systemd user units on dexter: runner/risk/scribe heartbeats (paper only).
 5. Kill drills A–C automated once.
