@@ -50,6 +50,16 @@ _BIAS_BY_DIRECTION = {1: "long", -1: "short"}
 _ALLOW_ENTRY_GATE = {"allowed": True, "reason": "no_entry_gate", "values": {}}
 _TRAIL_EXIT_MODES = {"kijun_trail", "atr_stop", "chandelier_trail"}
 _SAME_BAR_ENTRY_BLOCK_EXIT_REASONS = _TRAIL_EXIT_MODES | {"time_stop"}
+_REGIME_SOURCE_TF = "1h"
+_TF_DURATION_MS = {
+    "1m": 60_000,
+    "5m": 5 * 60_000,
+    "15m": 15 * 60_000,
+    "30m": 30 * 60_000,
+    "1h": 3_600_000,
+    "4h": 4 * 3_600_000,
+    "1d": 24 * 3_600_000,
+}
 _PHASE2_COMPONENT_DEFAULTS = {
     "adx_di": False,
     "kumo_width_atr": True,
@@ -155,6 +165,7 @@ def run_backtest_cartridge(
     trial_count: int = 1,
     regime_tf: str | None = None,
     regime_htf: str | None = None,
+    regime_source_candles: Sequence[Mapping[str, Any]] | None = None,
     confirm_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run a supported paper research cartridge over supplied candles."""
@@ -218,6 +229,7 @@ def run_backtest_cartridge(
             regime_tf=safe_regime_tf,
             regime_htf=safe_regime_htf,
             params=phase2_regime_params,
+            source_candles=regime_source_candles,
         )
         if phase2_regime_enabled
         else None
@@ -280,6 +292,13 @@ def run_backtest_cartridge(
                 "permits that side."
             ),
         }
+        if regime_source_candles is not None:
+            report["regime_gate"]["source"] = {
+                "mode": "stored_1h_regime_source",
+                "stored_tf": _REGIME_SOURCE_TF,
+                "decision_tf": safe_tf,
+                "stored_1h_candle_count": len(regime_source_candles),
+            }
     elif safe_regime_tf is not None and not bool(phase2_config["enabled"]):
         report["regime_gate"] = {
             "enabled": False,
@@ -706,6 +725,18 @@ def cartridge_backtest_from_store(
     safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
     windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    regime_source_candles = _regime_source_1h_candles(
+        safe_symbol,
+        decision_tf=safe_tf,
+        cartridge=cartridge,
+        regime_tf=regime_tf,
+        aura_root=aura_root,
+    )
+    windowed_regime_source_candles = _window_regime_source_candles(
+        regime_source_candles,
+        reference_candles=windowed_candles,
+        decision_tf=safe_tf,
+    )
     confirm_symbol = _confirm_symbol_from_cartridge(cartridge)
     confirm_candles = (
         read_candles(confirm_symbol, safe_tf, aura_root_override=aura_root)
@@ -728,10 +759,17 @@ def cartridge_backtest_from_store(
         trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
+        regime_source_candles=windowed_regime_source_candles,
         confirm_candles=windowed_confirm_candles,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
+    if regime_source_candles is not None:
+        _annotate_regime_source_path(
+            report,
+            path=ohlcv_path(safe_symbol, _REGIME_SOURCE_TF, aura_root_override=aura_root),
+            source_candle_count=len(regime_source_candles),
+        )
     if confirm_symbol is not None:
         report["confirm_market_path"] = str(
             ohlcv_path(confirm_symbol, safe_tf, aura_root_override=aura_root)
@@ -782,6 +820,18 @@ def cartridge_oos_backtest_from_store(
     safe_tf = validate_tf(tf if tf is not None else str(cartridge["tf"]))
     candles = read_candles(safe_symbol, safe_tf, aura_root_override=aura_root)
     windowed_candles = _window_candles(candles, max_bars=max_bars, since_ts_ms=since_ts_ms)
+    regime_source_candles = _regime_source_1h_candles(
+        safe_symbol,
+        decision_tf=safe_tf,
+        cartridge=cartridge,
+        regime_tf=regime_tf,
+        aura_root=aura_root,
+    )
+    windowed_regime_source_candles = _window_regime_source_candles(
+        regime_source_candles,
+        reference_candles=windowed_candles,
+        decision_tf=safe_tf,
+    )
     confirm_symbol = _confirm_symbol_from_cartridge(cartridge)
     confirm_candles = (
         read_candles(confirm_symbol, safe_tf, aura_root_override=aura_root)
@@ -806,10 +856,17 @@ def cartridge_oos_backtest_from_store(
         regime_htf=regime_htf,
         oos_split=split_fraction,
         cartridge_root=cartridge_root,
+        regime_source_candles=windowed_regime_source_candles,
         confirm_candles=windowed_confirm_candles,
     )
     report["market_path"] = str(ohlcv_path(safe_symbol, safe_tf, aura_root_override=aura_root))
     report["source_candle_count"] = len(candles)
+    if regime_source_candles is not None:
+        _annotate_regime_source_path(
+            report,
+            path=ohlcv_path(safe_symbol, _REGIME_SOURCE_TF, aura_root_override=aura_root),
+            source_candle_count=len(regime_source_candles),
+        )
     if confirm_symbol is not None:
         report["confirm_market_path"] = str(
             ohlcv_path(confirm_symbol, safe_tf, aura_root_override=aura_root)
@@ -838,6 +895,7 @@ def run_cartridge_oos_split(
     regime_htf: str | None = None,
     oos_split: float = 0.7,
     cartridge_root: str | Path = CARTRIDGE_ROOT,
+    regime_source_candles: Sequence[Mapping[str, Any]] | None = None,
     confirm_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run a pre-registered chronological IS/OOS cartridge bake-off."""
@@ -848,6 +906,16 @@ def run_cartridge_oos_split(
     split_index = _chronological_split_index(len(candles), split_fraction)
     is_candles = list(candles[:split_index])
     oos_candles = list(candles[split_index:])
+    regime_is_source_candles = _window_regime_source_candles(
+        regime_source_candles,
+        reference_candles=is_candles,
+        decision_tf=safe_tf,
+    )
+    regime_oos_source_candles = _window_regime_source_candles(
+        regime_source_candles,
+        reference_candles=oos_candles,
+        decision_tf=safe_tf,
+    )
     confirm_is_candles = (
         _filter_candles_to_timestamps(confirm_candles, reference_candles=is_candles)
         if confirm_candles is not None
@@ -869,6 +937,7 @@ def run_cartridge_oos_split(
         trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
+        regime_source_candles=regime_is_source_candles,
         confirm_candles=confirm_is_candles,
     )
     candidate_oos = run_backtest_cartridge(
@@ -882,6 +951,7 @@ def run_cartridge_oos_split(
         trial_count=trial_count,
         regime_tf=regime_tf,
         regime_htf=regime_htf,
+        regime_source_candles=regime_oos_source_candles,
         confirm_candles=confirm_oos_candles,
     )
     baseline_is = _run_baseline_backtest(
@@ -896,6 +966,7 @@ def run_cartridge_oos_split(
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         cartridge_root=cartridge_root,
+        regime_source_candles=regime_is_source_candles,
     )
     baseline_oos = _run_baseline_backtest(
         oos_candles,
@@ -909,6 +980,7 @@ def run_cartridge_oos_split(
         regime_tf=regime_tf,
         regime_htf=regime_htf,
         cartridge_root=cartridge_root,
+        regime_source_candles=regime_oos_source_candles,
     )
     kill_criteria = _mapping(cartridge, "kill_criteria")
     metric_name = str(kill_criteria["baseline_metric"])
@@ -1382,12 +1454,14 @@ def _regime_entry_gate_provider(
     regime_tf: str,
     regime_htf: str | None,
     params: RegimeParams | None = None,
+    source_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> _EntryGateProvider:
     resolved_params = params if params is not None else RegimeParams(regime_tf=regime_tf, htf_tf=regime_htf)
     effective_htf = resolved_params.htf_tf if resolved_params.use_htf_veto else None
-    regime_candles = resample_1h_candles(candles, symbol=symbol, target_tf=regime_tf)
+    regime_source_candles = source_candles if source_candles is not None else candles
+    regime_candles = resample_1h_candles(regime_source_candles, symbol=symbol, target_tf=regime_tf)
     htf_candles = (
-        resample_1h_candles(candles, symbol=symbol, target_tf=effective_htf)
+        resample_1h_candles(regime_source_candles, symbol=symbol, target_tf=effective_htf)
         if effective_htf is not None
         else None
     )
@@ -1804,6 +1878,7 @@ def _run_baseline_backtest(
     regime_tf: str | None,
     regime_htf: str | None,
     cartridge_root: str | Path,
+    regime_source_candles: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     baseline_ref = str(cartridge["baseline_ref"])
     if baseline_ref == "ichimoku_v0":
@@ -1838,6 +1913,7 @@ def _run_baseline_backtest(
         trial_count=trial_count,
         regime_tf=baseline_regime_tf,
         regime_htf=baseline_regime_htf,
+        regime_source_candles=regime_source_candles if baseline_regime_tf is not None else None,
     )
 
 
@@ -1923,6 +1999,100 @@ def _filter_candles_to_timestamps(
         for candle in candles
         if _candle_ts_ms(candle) in reference_timestamps
     ]
+
+
+def _regime_source_1h_candles(
+    symbol: str,
+    *,
+    decision_tf: str,
+    cartridge: Mapping[str, Any],
+    regime_tf: str | None,
+    aura_root: str | Path | None,
+) -> list[dict[str, Any]] | None:
+    if not _needs_stored_1h_regime_source(
+        cartridge,
+        decision_tf=decision_tf,
+        regime_tf=regime_tf,
+    ):
+        return None
+
+    safe_symbol = validate_symbol(symbol)
+    source_path = ohlcv_path(safe_symbol, _REGIME_SOURCE_TF, aura_root_override=aura_root)
+    source_candles = read_candles(safe_symbol, _REGIME_SOURCE_TF, aura_root_override=aura_root)
+    if not source_candles:
+        raise ValueError(
+            f"no stored 1h regime source candles found at {source_path}; "
+            f"--tf {decision_tf} decision candles are not a valid fallback for "
+            "Phase 2 regime resampling"
+        )
+    return source_candles
+
+
+def _needs_stored_1h_regime_source(
+    cartridge: Mapping[str, Any],
+    *,
+    decision_tf: str,
+    regime_tf: str | None,
+) -> bool:
+    safe_decision_tf = validate_tf(decision_tf)
+    if regime_tf is None or safe_decision_tf == _REGIME_SOURCE_TF:
+        return False
+    validate_tf(regime_tf)
+    return bool(_phase2_ablation_config(cartridge)["enabled"])
+
+
+def _window_regime_source_candles(
+    candles: Sequence[Mapping[str, Any]] | None,
+    *,
+    reference_candles: Sequence[Mapping[str, Any]],
+    decision_tf: str,
+) -> list[Mapping[str, Any]] | None:
+    if candles is None:
+        return None
+    if not reference_candles:
+        return []
+
+    first_ts_ms = _candle_ts_ms(reference_candles[0])
+    stop_ts_ms = _candle_ts_ms(reference_candles[-1]) + _tf_duration_ms(decision_tf)
+    return [
+        candle
+        for candle in candles
+        if first_ts_ms <= _candle_ts_ms(candle) < stop_ts_ms
+    ]
+
+
+def _tf_duration_ms(tf: str) -> int:
+    safe_tf = validate_tf(tf)
+    return _TF_DURATION_MS[safe_tf]
+
+
+def _annotate_regime_source_path(
+    report: dict[str, Any],
+    *,
+    path: Path,
+    source_candle_count: int,
+) -> None:
+    for regime_gate in _iter_regime_gate_payloads(report):
+        source = regime_gate.get("source")
+        if isinstance(source, dict):
+            source["path"] = str(path)
+            source["source_candle_count"] = source_candle_count
+
+
+def _iter_regime_gate_payloads(report: Mapping[str, Any]):
+    regime_gate = report.get("regime_gate")
+    if isinstance(regime_gate, dict):
+        yield regime_gate
+    for key in ("is", "oos"):
+        child = report.get(key)
+        if isinstance(child, Mapping):
+            yield from _iter_regime_gate_payloads(child)
+    baseline = report.get("baseline")
+    if isinstance(baseline, Mapping):
+        for key in ("is", "oos"):
+            child = baseline.get(key)
+            if isinstance(child, Mapping):
+                yield from _iter_regime_gate_payloads(child)
 
 
 def _combined_split_return_series(*reports: Mapping[str, Any]) -> dict[str, Any]:

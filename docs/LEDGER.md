@@ -401,3 +401,22 @@ beyond noise.
 Locked implication: production thin spine leaves width ON; no further N is
 spent on width. Intern R8 remains frozen. The next planned unscarred shot is 4h
 signal/regime-TF entry, not in this PR.
+
+## 2026-08-22 4h regime-TF signal one-shot
+
+Paper-only CoS bank for `ichi_cloud_bias_tsmom_4h_v0` at HEAD `6a4054c`.
+Evidence path: `/var/aura/evidence/evals/tf4h-cloud-bias-20260822/`.
+
+Flags:
+`--tf 4h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only`.
+
+Adaptation note: regime labels were sourced from stored 1h OHLCV for the
+Phase-2 regime/HTF classifier; trading decisions and PnL stayed on stored 4h
+decision bars.
+
+| Date | Cartridge id | Symbols | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_cloud_bias_tsmom_4h_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 4h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only` | 6a4054c | dexter paper | XBT IS ATR 14.01 < baseline 17.31 (lose), OOS 37.57 > 26.32 (beat), trades 109/48. ETH IS 67.82 < 78.56 (lose), OOS 27.49 > -3.95 (beat), trades 96/39. | false | killed forever | IS lost both symbols under the falsifier despite OOS beats; do not revive. |
+
+Disposition: **killed forever** -- IS lose both symbols; do not revive
+`ichi_cloud_bias_tsmom_4h_v0`. Intern re-freeze after this bank; no family mill.
