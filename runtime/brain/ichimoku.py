@@ -238,3 +238,16 @@ def _required_float(value: float | None, field_name: str) -> float:
     if value is None:
         raise ValueError(f"{field_name} is required")
     return value
+
+
+def _empty_signal(params: IchimokuParams, reason: str) -> IchimokuSignal:
+    return IchimokuSignal(
+        ok=False,
+        reason=reason,
+        bias="flat",
+        index=None,
+        ts_ms=None,
+        params=params,
+        components={},
+        features={},
+    )
