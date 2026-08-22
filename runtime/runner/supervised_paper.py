@@ -19,7 +19,8 @@ from typing import Any, Mapping, Sequence
 
 from runtime.evidence import append_decision_event, build_decision_event, decision_jsonl_path
 from runtime.kill_state import read_kill_state_file
-from runtime.market import read_candles, validate_symbol, validate_tf
+from runtime.market.ohlcv import read_candles
+from runtime.market.symbols import validate_symbol, validate_tf
 from runtime.regime import RegimeParams, classify_series, regime_allows, resample_1h_candles
 from runtime.risk import AdmissionResult, admit
 

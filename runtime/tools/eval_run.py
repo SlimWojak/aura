@@ -167,8 +167,6 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
         fee_bps=args.fee_bps,
-        regime_tf=args.regime_tf,
-        regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf)
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
@@ -197,6 +195,8 @@ def command_cartridge(args: Namespace) -> dict[str, Any]:
         max_bars=args.max_bars,
         since_ts_ms=parse_since_ts_ms(args.since),
         fee_bps=args.fee_bps,
+        regime_tf=args.regime_tf,
+        regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
     )
     eval_id = default_eval_id(symbol=symbol, tf=tf, cartridge_id=report["cartridge"]["id"])
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
