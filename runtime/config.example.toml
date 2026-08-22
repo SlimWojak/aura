@@ -2,7 +2,7 @@
 # Copy outside git before use; do not store secrets here.
 
 aura_root = "/var/aura"
-mode = "paper"
+mode = "paper_only"
 venue = "kraken"
 host_role = "dexter"
 
@@ -23,3 +23,10 @@ allow_dangerous = false
 policy_file = "RISK_POLICY.md"
 paper_only = true
 autopromote_live = false
+max_notional_usd = 500
+max_open_positions = 2
+max_daily_loss_usd = 200
+max_weekly_loss_usd = 500
+max_leverage = 2
+dead_man_seconds = 600
+mode = "paper_only"
