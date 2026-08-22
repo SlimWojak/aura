@@ -20,6 +20,7 @@ from runtime.eval import (
 )
 from runtime.eval import backtest_ichimoku
 from runtime.market.ohlcv import SOURCE, ohlcv_path, write_candles
+from runtime.regime import RegimeSnapshot, RegimeState
 from runtime.tools.eval_run import main as eval_main
 
 
@@ -230,6 +231,93 @@ class EvalHarnessTests(TestCase):
         self.assertGreater(strong["metrics"]["trade_count"], 0)
         self.assertEqual(0, weak["metrics"]["trade_count"])
         self.assertIn("long", {trade["direction"] for trade in strong["trades"]})
+
+    def test_phase2_regime_gate_reduces_entries_when_regime_denies(self):
+        closes = [
+            100 + ((index % 16) - 8) + (index * 0.03)
+            for index in range(96)
+        ]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+        baseline = run_backtest_cartridge(
+            candles,
+            cartridge=fast_cartridge(regime={"type": "none", "params": {}}),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.RANGE),
+        ):
+            gated = run_backtest_cartridge(
+                candles,
+                cartridge=fast_cartridge(regime={"type": "none", "params": {}}),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertGreater(baseline["metrics"]["trade_count"], 0)
+        self.assertEqual(0, gated["metrics"]["trade_count"])
+        self.assertGreater(gated["metrics"]["entry_gate_denied_count"], 0)
+        self.assertTrue(
+            any(signal["entry_gate"]["reason"] == "regime_veto" for signal in gated["signals"])
+        )
+
+    def test_phase2_regime_gate_side_locks_trend_states(self):
+        closes = [140 - index for index in range(96)]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(candles), RegimeState.TREND_BULL),
+        ):
+            gated = run_backtest_cartridge(
+                candles,
+                cartridge=fast_cartridge(regime={"type": "none", "params": {}}),
+                symbol="PF_XBTUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+            )
+
+        self.assertEqual(0, gated["metrics"]["trade_count"])
+        denied_signals = [
+            signal
+            for signal in gated["signals"]
+            if signal["bias"] == "short" and not signal["entry_gate"]["allowed"]
+        ]
+        self.assertTrue(denied_signals)
+        self.assertEqual("TREND_BULL", denied_signals[0]["entry_gate"]["values"]["state"])
+
+    def test_trend_only_cartridge_requires_regime_flag(self):
+        cartridge = tk_cloud_strong_cartridge()
+        cartridge["id"] = "ichi_tk_strong_trend_only_v0"
+
+        with self.assertRaisesRegex(ValueError, "requires --regime-tf"):
+            run_backtest_cartridge(
+                [candle(index, 100 + index) for index in range(96)],
+                cartridge=cartridge,
+                symbol="PF_XBTUSD",
+                tf="1h",
+            )
+
+    def test_kijun_bounce_cartridge_detects_cross_back_entry(self):
+        closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 100, 110, 120, 130, 140]
+        report = run_backtest_cartridge(
+            [candle(index, close) for index, close in enumerate(closes)],
+            cartridge=kijun_bounce_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(report["metrics"]["trade_count"], 0)
+        self.assertIn("long", {trade["direction"] for trade in report["trades"]})
+        long_signals = [signal for signal in report["signals"] if signal["bias"] == "long"]
+        self.assertTrue(long_signals)
 
     def test_signal_for_closed_bar_ignores_future_candle_mutation(self):
         candles = [candle(index, 100 + index) for index in range(12)]
@@ -462,6 +550,40 @@ def tk_cloud_strong_cartridge() -> dict:
             "max_bars_in_trade": None,
         },
     )
+
+
+def kijun_bounce_cartridge() -> dict:
+    return fast_cartridge(
+        regime={"type": "none", "params": {}},
+        entry_rules={
+            "mode": "kijun_bounce",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "none",
+            "require_chikou_confirmation": True,
+            "chikou_mode": "close",
+        },
+        exit_rules={
+            "mode": "flat_on_rule_fail",
+            "close_on_flat": True,
+            "close_on_opposite": True,
+            "max_bars_in_trade": None,
+        },
+    )
+
+
+def regime_snapshots(count: int, state: RegimeState) -> list[RegimeSnapshot]:
+    return [
+        RegimeSnapshot(
+            state=state,
+            confidence=0.9,
+            reasons=("test_fixture",),
+            features={},
+            as_of=index * 3_600_000,
+            tf="1h",
+        )
+        for index in range(count)
+    ]
 
 
 def run_cli(argv):

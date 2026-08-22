@@ -76,7 +76,12 @@ Exit: CoS can request a tiny supervised paper action end-to-end with traces; col
    labels under `runtime/regime`, CLI evidence with occupancy/flip-rate
    summary, and no entry strategy or PnL claim. Research Intern cartridges
    remain separate research ammo.
-6. Weekly kill/promote memo; CoS metrics still primary.
+6. [x] Aura Regime Phase 2 hard veto for paper paths: pure
+   `regime_allows()` matrix, optional cartridge eval `--regime-tf/--regime-htf`
+   side-locking, opt-in supervised `--require-regime` JSONL veto, and draft
+   TREND-only TK/kijun-bounce cartridges. Exits remain allowed; no live scopes
+   or risk ceiling changes.
+7. Weekly kill/promote memo; CoS metrics still primary.
 
 Exit: ≥2 weekly memos with honest traces; no fence breaches.
 
@@ -110,3 +115,5 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 8. [x] Thin eval harness backtest + ledger scorer.
 9. [x] Research cartridge queue scaffold for CoS thesis triage.
 10. [x] Regime Phase 1 permissioning labels (`docs/REGIME.md`).
+11. [x] Regime Phase 2 paper hard veto for cartridge eval and supervised opt-in
+    (`docs/REGIME.md`).

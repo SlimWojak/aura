@@ -19,10 +19,12 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_adx_regime_v0",
                 "ichi_chikou_open_space_v0",
                 "ichi_cloud_thickness_v0",
+                "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
                 "ichi_params_20_60_v0",
                 "ichi_params_20_60_er_v0",
                 "ichi_tk_cloud_strong_v0",
+                "ichi_tk_strong_trend_only_v0",
                 "ichi_tk_cloud_v0",
                 "ichi_v0_baseline",
             },
@@ -62,6 +64,8 @@ class ResearchCartridgeTests(TestCase):
         cloud = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_thickness_v0.yaml")
         slow_er = load_cartridge(CARTRIDGE_ROOT / "ichi_params_20_60_er_v0.yaml")
         tk_strong = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_cloud_strong_v0.yaml")
+        trend_only = load_cartridge(CARTRIDGE_ROOT / "ichi_tk_strong_trend_only_v0.yaml")
+        kijun_bounce = load_cartridge(CARTRIDGE_ROOT / "ichi_kijun_bounce_trend_v0.yaml")
 
         self.assertEqual("er", er["regime"]["type"])
         self.assertEqual(10, er["regime"]["params"]["period"])
@@ -73,6 +77,9 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("tk_cloud_bias", tk_strong["entry_rules"]["mode"])
         self.assertEqual("tk_cross_only", tk_strong["entry_rules"]["require_tk_state"])
         self.assertFalse(tk_strong["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual("total_pnl_points_after_fees", trend_only["kill_criteria"]["baseline_metric"])
+        self.assertEqual("kijun_bounce", kijun_bounce["entry_rules"]["mode"])
+        self.assertEqual("none", kijun_bounce["entry_rules"]["require_tk_state"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")

@@ -12,6 +12,7 @@ from runtime.regime.features import (
     price_vs_kumo,
     tk_align,
 )
+from runtime.regime.gate import regime_allows
 from runtime.regime.resample import resample_1h_candles
 from runtime.regime.types import (
     REGIME_LABEL_SCHEMA,
@@ -38,6 +39,7 @@ __all__ = [
     "future_twist",
     "kumo_width_atr",
     "price_vs_kumo",
+    "regime_allows",
     "resample_1h_candles",
     "tk_align",
 ]
