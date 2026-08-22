@@ -449,3 +449,48 @@ until CoS opts into funding-on rescores.
 
 Follow-up: funding store gaps exist before May 2026; optional later gap-fill or
 longer contiguous pull can extend this evidence.
+
+## 2026-08-22 funding gap-fill
+
+Paper-only CoS funding gap-fill bank. Evidence path:
+`/var/aura/evidence/evals/funding-gapfill-20260822/`.
+
+- Action: `market_ingest funding-pull PF_XBTUSD+PF_ETHUSD` from official Kraken
+  funding history; no invented zero rates.
+- Before 8798 -> after 8802 rows; tip extended to `2026-08-22T10:00:00Z`.
+- Residual: 9 official missing hours, identical for `PF_XBTUSD` and
+  `PF_ETHUSD`:
+  - `2025-08-31T04:00:00Z`
+  - `2025-11-01T16:00:00Z`
+  - `2025-11-01T17:00:00Z`
+  - `2025-11-02T04:00:00Z`
+  - `2025-11-19T05:00:00Z`
+  - `2025-12-04T09:00:00Z`
+  - `2026-02-04T12:00:00Z`
+  - `2026-02-13T18:00:00Z`
+  - `2026-05-09T06:00:00Z`
+- Longest contiguous official span starts at `2026-05-09T07:00:00Z`
+  (~2524h).
+- Cannot clear holes without fabricating rates; full
+  `--since 2025-08-20` still fail-closes.
+
+## 2026-08-22 funding-on controls re-score
+
+Paper-only CoS funding-on controls re-score. Evidence path:
+`/var/aura/evidence/evals/funding-rescore-controls-20260822/`.
+
+Run context: HEAD `61351e1`; `--since 2026-05-09T07:00:00Z`; thin spine;
+`--trial-count 40`; `funding_missing_held_bars=0`.
+
+| Cartridge id | Symbol | Fee-only OOS ATR | Fee-only DSR | Fee+funding OOS ATR | Fee+funding DSR | funding_drag_atr |
+|---|---|---:|---:|---:|---:|---:|
+| `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD | 26.0176 | 0.6668 | 25.8748 | 0.6599 | 0.1428 |
+| `ichi_cloud_bias_tsmom_thin_v0` | PF_ETHUSD | 25.6014 | 0.6170 | 25.4097 | 0.6077 | 0.1917 |
+| `ichi_params_20_60_trend_v0` | PF_XBTUSD | 30.5817 | 0.7761 | 30.3756 | 0.7683 | 0.2061 |
+| `ichi_params_20_60_trend_v0` | PF_ETHUSD | 0.1476 | 0.0156 | 0.1102 | 0.0153 | 0.0374 |
+| `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD | -0.6254 | 0.0105 | -0.6455 | 0.0104 | 0.0201 |
+| `ichi_always_on_tsmom_thin_v0` | PF_ETHUSD | -4.9391 | 0.0005 | -4.9909 | 0.0005 | 0.0517 |
+
+CoS verdict: funding drag is small and causes no status flips. Default eval
+remains fee-only; Intern remains frozen. Short-window caveat applies: this is
+not full-history Track A.
