@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.env.*
+secrets/
+*.pem
+__pycache__/
+.venv/
+venv/
+/var/
+scratch/
+*.log

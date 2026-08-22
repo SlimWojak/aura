@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aura.decision_event.v1",
+  "type": "object",
+  "required": ["schema", "ts", "trial_id", "actor", "intent", "risk_gate", "venue"],
+  "properties": {
+    "schema": { "const": "aura.decision_event.v1" },
+    "ts": { "type": "string", "format": "date-time" },
+    "trial_id": { "type": "string" },
+    "hypothesis_id": { "type": "string" },
+    "actor": { "type": "string" },
+    "intent": { "type": "string", "enum": ["open", "close", "cancel", "hold", "risk_reject"] },
+    "inputs": { "type": "object" },
+    "risk_gate": {
+      "type": "object",
+      "required": ["result", "policy_version"],
+      "properties": {
+        "result": { "enum": ["allow", "reject"] },
+        "reasons": { "type": "array", "items": { "type": "string" } },
+        "policy_version": { "type": "string" }
+      }
+    },
+    "venue": { "type": "object" },
+    "fills": { "type": "array" },
+    "pnl_delta_paper": { "type": ["number", "null"] },
+    "trace_ref": { "type": "string" },
+    "human_auditable": { "type": "boolean" }
+  }
+}
