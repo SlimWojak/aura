@@ -20,10 +20,16 @@ import in this scaffold.
   - `run_supervised_order(...)` implements the first real CoS paper loop:
     human trigger -> live futures-paper state -> `admit()` -> decision JSONL
     -> optional futures-paper order.
+  - `run_hard_kill(...)` is the explicit hard-kill escape hatch: it writes
+    `hard`, cancels all futures paper orders, and flattens futures paper
+    positions without going through `admit()`.
 - `runtime.tools.admit_smoke`
   - Human-triggered smoke entrypoint for CoS; no daemon and no venue call.
 - `runtime.tools.supervised_paper`
   - Human-triggered CLI for one supervised Kraken futures-paper order on dexter.
+- `runtime.tools.kill_drill`
+  - Human-triggered soft/hard/arm/heartbeat/dead-man/drill CLI. No systemd unit
+    and no strategy logic.
 
 ## Risk gate inputs
 
@@ -89,6 +95,7 @@ ${AURA_ROOT:-/var/aura}/evidence/trials/{trial_id}/decision.jsonl
 `--aura-root` exists for unit tests and supervised local smoke only. Production
 on dexter should use `/var/aura`. A kill file at
 `/var/aura/paper/kill_state` containing `soft` or `hard` rejects new entries.
+Writing `armed` or deleting the file clears the kill state.
 
 Dry run admits and writes intent evidence without any venue order call:
 
@@ -114,6 +121,48 @@ The default size example, `0.001` XBT, is intentionally tiny and well below the
 locked USD 500 notional cap when paired with a truthful small notional such as
 `--notional-usd 100`. The gate still enforces USD 500 max notional, 2x leverage,
 2 open positions, daily/weekly loss caps, kill state, and fresh account state.
+
+## Kill-drill CLI
+
+Soft kill writes `${AURA_ROOT:-/var/aura}/paper/kill_state` and records an ops
+event. It does not flatten:
+
+```bash
+python3 -m runtime.tools.kill_drill soft
+python3 -m runtime.tools.kill_drill drill-a
+```
+
+Hard kill is the only admission bypass in the runtime. It is deliberately scoped
+to `kraken futures paper ...`, marks events with `kill_override: true`, calls
+`cancel-all`, reads positions, and submits opposite-side paper market orders for
+open positions:
+
+```bash
+python3 -m runtime.tools.kill_drill hard --i-understand-paper
+python3 -m runtime.tools.kill_drill drill-b --i-understand-paper
+```
+
+Re-arm and heartbeat:
+
+```bash
+python3 -m runtime.tools.kill_drill arm
+python3 -m runtime.tools.kill_drill heartbeat
+python3 -m runtime.tools.kill_drill deadman-check
+```
+
+`deadman-check` compares `${AURA_ROOT:-/var/aura}/paper/heartbeat` with
+`RiskPolicy.dead_man_seconds` (600 by default). A stale or missing heartbeat
+invokes the hard-kill path. This PR only adds the command; no daemon or systemd
+timer is installed.
+
+Kill ops events use schema `aura.kill_event.v1` and append under:
+
+```text
+${AURA_ROOT:-/var/aura}/evidence/trials/T-kill-.../decision.jsonl
+```
+
+Drills can mix `aura.kill_event.v1` ops records and `aura.decision_event.v1`
+supervised admission records in the same trial JSONL.
 
 ## Runner call pattern
 

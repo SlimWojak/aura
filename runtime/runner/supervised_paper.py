@@ -18,6 +18,7 @@ import subprocess
 from typing import Any, Mapping, Sequence
 
 from runtime.evidence import append_decision_event, build_decision_event, decision_jsonl_path
+from runtime.kill_state import read_kill_state_file
 from runtime.risk import AdmissionResult, admit
 
 
@@ -316,15 +317,7 @@ def map_account_state(
 
 
 def read_kill_state(aura_root: str | Path | None) -> str:
-    root = Path(aura_root) if aura_root is not None else Path("/var/aura")
-    path = root / "paper" / "kill_state"
-    try:
-        value = path.read_text(encoding="utf-8").strip().lower()
-    except FileNotFoundError:
-        return "armed"
-    if value in {"soft", "hard"}:
-        return value
-    return value or "invalid"
+    return read_kill_state_file(aura_root)
 
 
 def build_proposal(
