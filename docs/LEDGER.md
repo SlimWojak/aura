@@ -621,3 +621,22 @@ Track A loosening, no live scopes, no ADDR/LTF follow-on, and no killed-id
 revival. The rank-2 FVG/flat-Span-B overlap thesis is dead; remaining
 enrichment candidates are limited to `daily_dr_side`, `daily_dr_position`, and
 cautious `daily_fvg_side`.
+
+## 2026-08-22 failed-auction brain scope
+
+Docs-only scope brief landed at
+`docs/briefs/2026-08-22-failed-auction-brain-scope.md`. No dexter run, data
+ingest, cartridge status mutation, Intern unlock, live scope, or runtime state
+change occurred.
+
+## 2026-08-22 failed-auction data audit park
+
+Docs-only follow-up banks the dexter data audit evidence path
+`/var/aura/evidence/audits/failed-auction-data-20260822.json`. Falsifier #1
+failed because Kraken-native history lacks the required multi-month
+aggressor-signed trades, OI history, liquidation series, and VP stores.
+
+CoS disposition: **PARK** the failed-auction brain on Kraken-native history. Do
+not fake absorption from OHLCV. External trade lane or forward-only collection
+requires explicit Slim lock and is not started here. No cartridge code, status
+mutation, Intern unlock, live scope, or runtime state change occurred.
