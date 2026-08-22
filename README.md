@@ -27,3 +27,6 @@ single-shot seats, not live operators.
 Start with [AGENTS.md](AGENTS.md), [docs/DISPATCH.md](docs/DISPATCH.md),
 [RISK_POLICY.md](RISK_POLICY.md), and [ops/kraken_scopes.md](ops/kraken_scopes.md)
 before dispatching any agent work.
+
+## Build plan
+- [Lean build plan](docs/BUILD_PLAN.md)
