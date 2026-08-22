@@ -34,6 +34,10 @@ PATH for non-interactive SSH should include `~/.local/bin` and `~/.cargo/bin` (b
 5. Risk admission is policy/code — LLM proposes, does not bypass RISK_POLICY.md.
 6. Spend ceiling for API delegates: see RISK_POLICY.md (USD 50/week default).
 
+First paper order path: use `python -m runtime.tools.supervised_paper` from
+`~/aura` so `admit()` runs before venue access and decision JSONL is written for
+every outcome.
+
 ## Invoke recipes (SSH from MacBook / CoS)
 
 ```bash
