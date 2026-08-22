@@ -57,6 +57,20 @@ dominance flips. Not an Ichimoku equilibrium map.
    (crypto analog of NQ <20k/5m). If the filter never binds, session thesis is
    fake.
 
+## Audit / Falsifier #1
+
+Evidence: `/var/aura/evidence/audits/failed-auction-data-20260822.json`
+
+- Dexter store: OHLCV 1h/4h 2023-04-11→2026-08-22; funding
+  2025-08-20→now; NO trades/OI history/liq/VP stores.
+- Kraken Futures: `/history` ≈100 recent trades (~7d docs); older `lastTime`
+  empty; OI current-only on tickers; no public historical liquidation series
+  found.
+
+Verdict: Falsifier #1 FAIL → PARK failed-auction brain on Kraken-native history.
+Do not fake absorption from OHLCV. External trade lane or forward-only collect
+require explicit Slim lock (not started).
+
 ## Build order
 
 1. Data audit on dexter/Kraken: trades, OI, liquidations availability + history
