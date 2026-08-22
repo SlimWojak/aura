@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stdout
+from datetime import UTC, datetime, timedelta
 import io
 import json
 from pathlib import Path
@@ -1214,10 +1215,11 @@ def candle(
 
 
 def stored_funding_rate(index: int, relative: str) -> dict[str, str | int]:
+    ts = datetime(2026, 8, 22, tzinfo=UTC) + timedelta(hours=index)
     return {
         "schema": FUNDING_SCHEMA,
         "symbol": "PF_XBTUSD",
-        "ts": index * 3_600_000,
+        "ts": ts.isoformat().replace("+00:00", "Z"),
         "funding_rate": "0",
         "relative_funding_rate": relative,
         "source": FUNDING_SOURCE,
