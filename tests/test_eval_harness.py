@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from typing import Any, Mapping, Sequence
 import unittest
 from unittest import TestCase
 from unittest.mock import patch
@@ -563,6 +564,106 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(
             any(signal["entry_gate"]["reason"] == "regime_veto" for signal in gated["signals"])
         )
+
+    def test_oos_store_uses_stored_1h_regime_source_for_4h_decisions(self):
+        decision_candles = [
+            four_hour_candle(index, 100 + ((index % 20) - 10) + index * 0.2)
+            for index in range(300)
+        ]
+        source_candles = [
+            candle(index, 100 + ((index % 80) - 40) * 0.05 + index * 0.04)
+            for index in range(300 * 4)
+        ]
+        write_candles(
+            ohlcv_path("PF_XBTUSD", "4h", aura_root_override=self.aura_root),
+            decision_candles,
+        )
+        write_candles(
+            ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root),
+            source_candles,
+        )
+        cartridge = fast_cartridge(regime={"type": "none", "params": {}})
+        cartridge["id"] = "test_4h_regime_source"
+        cartridge["tf"] = "4h"
+        cartridge_path = self.aura_root / "test_4h_regime_source.yaml"
+        write_test_cartridge(cartridge_path, cartridge)
+
+        classify_calls = []
+
+        def classify_side_effect(regime_candles, params, tf, htf_candles=None):
+            classify_calls.append(
+                {
+                    "candles": list(regime_candles),
+                    "tf": tf,
+                    "htf_candles": None if htf_candles is None else list(htf_candles),
+                }
+            )
+            return snapshots_from_candles(regime_candles, RegimeState.TREND_BULL, tf=tf)
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            side_effect=classify_side_effect,
+        ):
+            report = backtest_ichimoku.cartridge_oos_backtest_from_store(
+                cartridge_path=cartridge_path,
+                symbol="PF_XBTUSD",
+                tf="4h",
+                aura_root=self.aura_root,
+                regime_tf="4h",
+                regime_htf="1d",
+                oos_split=0.7,
+            )
+
+        self.assertTrue(report["ok"])
+        self.assertEqual("4h", report["tf"])
+        self.assertEqual(
+            str(ohlcv_path("PF_XBTUSD", "4h", aura_root_override=self.aura_root)),
+            report["market_path"],
+        )
+        self.assertEqual("4h", classify_calls[0]["tf"])
+        self.assertTrue(all(row["tf"] == "4h" for row in classify_calls[0]["candles"]))
+        self.assertIsNotNone(classify_calls[0]["htf_candles"])
+        self.assertTrue(all(row["tf"] == "1d" for row in classify_calls[0]["htf_candles"]))
+        self.assertEqual("4h", report["is"]["tf"])
+        self.assertEqual(
+            "stored_1h_regime_source",
+            report["regime_gate"]["source"]["mode"],
+        )
+        self.assertEqual(
+            str(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root)),
+            report["regime_gate"]["source"]["path"],
+        )
+        self.assertEqual(
+            len(source_candles),
+            report["regime_gate"]["source"]["source_candle_count"],
+        )
+
+    def test_non_1h_store_regime_source_missing_fails_closed(self):
+        decision_candles = [
+            four_hour_candle(index, 100 + ((index % 20) - 10) + index * 0.2)
+            for index in range(96)
+        ]
+        write_candles(
+            ohlcv_path("PF_XBTUSD", "4h", aura_root_override=self.aura_root),
+            decision_candles,
+        )
+        cartridge = fast_cartridge(regime={"type": "none", "params": {}})
+        cartridge["id"] = "test_4h_missing_regime_source"
+        cartridge["tf"] = "4h"
+        cartridge_path = self.aura_root / "test_4h_missing_regime_source.yaml"
+        write_test_cartridge(cartridge_path, cartridge)
+
+        with self.assertRaisesRegex(ValueError, "no stored 1h regime source candles"):
+            backtest_ichimoku.cartridge_oos_backtest_from_store(
+                cartridge_path=cartridge_path,
+                symbol="PF_XBTUSD",
+                tf="4h",
+                aura_root=self.aura_root,
+                regime_tf="4h",
+                regime_htf="1d",
+                oos_split=0.7,
+            )
 
     def test_regime_exit_flattens_when_open_side_no_longer_allowed(self):
         candles = [candle(index, 100 + index) for index in range(96)]
@@ -1214,6 +1315,12 @@ def candle(
     }
 
 
+def four_hour_candle(index: int, close: int | float) -> dict[str, str | int]:
+    row = candle(index * 4, close)
+    row["tf"] = "4h"
+    return row
+
+
 def stored_funding_rate(index: int, relative: str) -> dict[str, str | int]:
     ts = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(hours=index)
     return {
@@ -1249,6 +1356,52 @@ def candle_ohlc(
         "close": str(close),
         "volume": "1",
     }
+
+
+def write_test_cartridge(path: Path, cartridge: dict) -> None:
+    entry_rules = cartridge["entry_rules"]
+    exit_rules = cartridge["exit_rules"]
+    regime = cartridge["regime"]
+    kill_criteria = cartridge["kill_criteria"]
+    path.write_text(
+        f"""id: {cartridge["id"]}
+title: {cartridge["title"]}
+status: {cartridge["status"]}
+thesis: {cartridge["thesis"]}
+symbol: {cartridge["symbol"]}
+tf: {cartridge["tf"]}
+baseline_ref: {cartridge["baseline_ref"]}
+ichimoku:
+  tenkan: {cartridge["ichimoku"]["tenkan"]}
+  kijun: {cartridge["ichimoku"]["kijun"]}
+  senkou_b: {cartridge["ichimoku"]["senkou_b"]}
+  displacement: {cartridge["ichimoku"]["displacement"]}
+entry_rules:
+  mode: {entry_rules["mode"]}
+  allowed_sides: [{", ".join(entry_rules["allowed_sides"])}]
+  require_close_vs_cloud: {entry_rules["require_close_vs_cloud"]}
+  require_tk_state: {entry_rules["require_tk_state"]}
+  require_chikou_confirmation: {str(entry_rules["require_chikou_confirmation"]).lower()}
+  chikou_mode: {entry_rules["chikou_mode"]}
+exit_rules:
+  mode: {exit_rules["mode"]}
+  close_on_flat: {str(exit_rules["close_on_flat"]).lower()}
+  close_on_opposite: {str(exit_rules["close_on_opposite"]).lower()}
+  max_bars_in_trade: null
+regime:
+  type: {regime["type"]}
+  params: {{}}
+kill_criteria:
+  max_dd_points: {kill_criteria["max_dd_points"]}
+  min_trades: {kill_criteria["min_trades"]}
+  must_beat_baseline: {str(kill_criteria["must_beat_baseline"]).lower()}
+  baseline_metric: {kill_criteria["baseline_metric"]}
+  notes: Test only.
+sources:
+  - tests/test_eval_harness.py
+""",
+        encoding="utf-8",
+    )
 
 
 def signal_exit_rule(report: dict, index: int) -> dict:
@@ -1484,6 +1637,25 @@ def regime_snapshots(count: int, state: RegimeState) -> list[RegimeSnapshot]:
             tf="1h",
         )
         for index in range(count)
+    ]
+
+
+def snapshots_from_candles(
+    candles: Sequence[Mapping[str, Any]],
+    state: RegimeState,
+    *,
+    tf: str,
+) -> list[RegimeSnapshot]:
+    return [
+        RegimeSnapshot(
+            state=state,
+            confidence=0.9,
+            reasons=("test",),
+            features={},
+            as_of=int(candle["ts_ms"]),
+            tf=tf,
+        )
+        for candle in candles
     ]
 
 

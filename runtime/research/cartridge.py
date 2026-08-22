@@ -13,7 +13,15 @@ import re
 from typing import Any, Mapping, Sequence
 
 
-STATUS_VALUES = {"draft", "queued", "tested", "killed", "kept"}
+STATUS_VALUES = {
+    "draft",
+    "queued",
+    "tested",
+    "killed",
+    "kept",
+    "champion_control",
+    "scarred_control",
+}
 ENTRY_MODES = {
     "always_on",
     "tk_cross",
@@ -352,6 +360,8 @@ def _parse_list(
 def _parse_scalar(raw_value: str, line_number: int) -> Any:
     if raw_value in {"{}", "[]"}:
         return {} if raw_value == "{}" else []
+    if raw_value.startswith("[") and raw_value.endswith("]"):
+        return _parse_inline_list(raw_value, line_number)
     lowered = raw_value.lower()
     if lowered == "true":
         return True
@@ -372,6 +382,19 @@ def _parse_scalar(raw_value: str, line_number: int) -> Any:
     if FLOAT_RE.fullmatch(raw_value) is not None:
         return float(raw_value)
     return raw_value
+
+
+def _parse_inline_list(raw_value: str, line_number: int) -> list[Any]:
+    inner = raw_value[1:-1].strip()
+    if not inner:
+        return []
+    values: list[Any] = []
+    for item in inner.split(","):
+        stripped_item = item.strip()
+        if not stripped_item:
+            raise ValueError(f"empty inline list item at line {line_number}")
+        values.append(_parse_scalar(stripped_item, line_number))
+    return values
 
 
 def _require_fields(values: Mapping[str, Any], required: set[str], label: str) -> None:

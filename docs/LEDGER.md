@@ -272,3 +272,151 @@ HTF+width-only thin baseline rerun below.
 | 2026-08-22 | `ichi_kumo_break_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR -15.91 < thin baseline 43.74. XBT OOS ATR -1.92 > thin baseline -7.33, but IS failed the IS+OOS beat gate. ETH also failed. | false | killed | Killed forever. Do not revive `ichi_kumo_break_thin_v0` or the older killed `ichi_kumo_break_trend_v0`. |
 | 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS ATR 64.55 and OOS ATR 4.60 beat thin baseline 43.74 and -7.33. ETH OOS ATR 34.92 lost to thin baseline 38.02. maxDD pts OK. | true on XBT | kept | Kept provisional paper only; not live. Same BTC-primary scar pattern as prior keeps; ETH remains secondary context. |
 | 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 702b6c5 | dexter paper | XBT IS/OOS ATR 120.35/60.65 beat thin baseline 43.74/-7.33. ETH IS/OOS ATR 190.88/97.61 beat thin baseline 133.30/38.02. Not no-op versus always_on: XBT trades 362 vs 338, overlap 78. | true | kept | Kept provisional paper only; not live. Strongest R7 candidate, but no autopromote. |
+
+## 2026-08-22 R7 DSR/PBO honesty rescore
+
+CoS/Curator R7 DSR/PBO honesty rescore for provisional paper keeps
+`ichi_always_on_tsmom_thin_v0` and `ichi_cloud_bias_tsmom_thin_v0` at commit
+`5005ba3d9ed11f18bc7a686ef056787c83b50438`, host dexter,
+`AURA_ROOT=/var/aura`. Rows used the thin Phase-2 spine: HTF+width on,
+ADX/dwell off, with flags
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only`.
+Evidence path:
+`/var/aura/evidence/evals/r7-dsr-pbo-20260822/`.
+
+This section banks the honesty rescore only: no cartridge status mutation, no
+new cartridges, no live scopes, no constellation/RIVER, no runtime state, and
+no previously killed id is revived. The two R7 keep YAML statuses remain
+`kept` as provisional paper only; no forever-kill decision is recorded here.
+`ichi_kumo_break_thin_v0` remains killed, and
+`ichi_params_20_60_trend_v0` is untouched.
+
+### R7 DSR/PBO baseline references
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_v0_baseline` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total -7.3311; DSR 0.0071 | n/a baseline ref | reference | Thin-spine baseline for R7 honesty comparison. |
+| 2026-08-22 | `ichi_v0_baseline` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 38.0179; DSR 0.2434 | n/a baseline ref | reference | Thin-spine baseline for R7 honesty comparison. |
+
+### R7 DSR/PBO rescore rows
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | Track A gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 4.5977 beats thin baseline -7.3311; DSR 0.0236 | false | provisional-fail | DSR fails `> 0.95`; candidate also fails the both-symbol gate because ETH loses to the thin baseline and ETH/Mixed PBO fail. YAML remains `kept` provisional paper only. |
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 34.9233 loses to thin baseline 38.0179; DSR 0.2027 | false | provisional-fail | DSR fails `> 0.95`; ETH OOS ATR loses to baseline and ETH PBO fails. YAML remains `kept` provisional paper only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 60.6522 beats thin baseline -7.3311; DSR 0.3432 | false | provisional-fail | ATR beats, but DSR fails `> 0.95`; ETH/Mixed PBO fail the Track A gate. YAML remains `kept` provisional paper only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only` | 5005ba3 | dexter paper | OOS: ATR total 97.6087 beats thin baseline 38.0179; DSR 0.7289 | false | provisional-fail | ATR beats, but DSR fails `> 0.95` and ETH PBO fails. YAML remains `kept` provisional paper only. |
+
+### R7 DSR/PBO matrix
+
+| Date | Universe | Metric | CSCV groups | Runnable paths | N_honest | PBO | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | BTC | atr_normalized | 8 | 4 | 37 | 0.0000 | pass | Passes strict PBO <0.10. PBO pass alone is insufficient without DSR >0.95 and both-symbol OOS ATR beat. |
+| 2026-08-22 | ETH | atr_normalized | 8 | 4 | 37 | 0.3429 | provisional-fail | Fails strict PBO <0.10. |
+| 2026-08-22 | Mixed BTC+ETH | atr_normalized | 8 | 8 | 37 | 0.1286 | provisional-fail | Fails strict PBO <0.10. |
+
+Track A gate for this R7 honesty bank is `DSR > 0.95 AND PBO < 0.10 AND
+beats baseline ATR on BOTH symbols`. CoS/Curator disposition is
+**provisional-fail** for both `kept` R7 TSMOM cartridges. The cartridge YAML
+statuses remain provisional paper `kept`; no forever-kill decision is made, no
+live behavior is added, and no killed id is revived.
+
+## 2026-08-22 status hygiene demotion bank
+
+Fable+Grok lateral review closes the misleading provisional `kept` labels without
+forever-killing any id. This is paper-only status hygiene: no strategy logic,
+regime defaults, live scopes, runtime state, or runner authority changes; no
+previously killed id is revived; Intern R8 remains frozen.
+
+Evidence cited from Track A rescore path:
+`/var/aura/evidence/evals/track-a-rescore-20260822/`; PR #34 R7 thin-spine bank:
+`/var/aura/evidence/evals/r7-thin-spine-20260822/`; and PR #35 R7 DSR/PBO
+honesty rescore: `/var/aura/evidence/evals/r7-dsr-pbo-20260822/`.
+
+| Date | Cartridge id | Prior status | New status | Rationale |
+|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_v0` | kept | scarred_control | Track A/R7 honesty makes the old keep a provisional-fail: BTC residual evidence remains useful as a control, but ETH, drawdown, DSR/PBO, and both-symbol baseline gates do not support runner status. |
+| 2026-08-22 | `ichi_always_on_tsmom_thin_v0` | kept | scarred_control | R7 BTC-primary residual passed, but ETH lost to the thin baseline and PR #35 honesty still failed; retain as a scarred paper control only. |
+| 2026-08-22 | `ichi_cloud_bias_tsmom_thin_v0` | kept | champion_control | Best residual R7 ATR control: XBT and ETH beat thin baselines, but PR #35 honesty still failed, so this remains a benchmark/control only, not a runner and not live. |
+
+## 2026-08-22 Track A power-test DETECTABLE
+
+Paper-only CoS power-test bank for the Track A harness at HEAD
+`ae6d5b026ffa8b3ac19710e030b469e680f129e3` (PR #38 harness). Evidence:
+`/var/aura/evidence/power_tests/20260822/` plus `SUMMARY.md`.
+
+Flags:
+`--tf 1h --fee-bps 4 --oos-split 0.7 --trial-count 37 --atr-period 14 --regime-tf 4h --regime-htf 1d`.
+Injected edge: `edge_sharpe 0.9`, period-level ATR-normalized.
+
+| Date | Symbol | Synthetic control | Result | CoS verdict note |
+|---|---|---|---|---|
+| 2026-08-22 | PF_XBTUSD | positive | exit 0; control_passed true; track_a_keep true; DSR 1.0; PBO 0.0; n_paths 37; n_honest 37 | Positive synthetic edge was kept. |
+| 2026-08-22 | PF_XBTUSD | negative | exit 0; control_passed true; track_a_keep false; DSR ~0.0154; PBO 1.0; n_paths 37; n_honest 37 | Negative shuffle was rejected. |
+| 2026-08-22 | PF_ETHUSD | positive | Same keep pattern as PF_XBTUSD positive; n_paths 37; n_honest 37 | Positive synthetic edge was kept. |
+| 2026-08-22 | PF_ETHUSD | negative | Same reject pattern as PF_XBTUSD negative; n_paths 37; n_honest 37 | Negative shuffle was rejected. |
+
+CoS verdict: **DETECTABLE** -- both positives keep synthetic edge; both
+negatives reject shuffle. `n_paths == n_honest == 37` on these synthetic runs,
+so the PBO scar is explicit and closed for this harness path.
+
+Implications locked: prior cartridge kills remain informative; Intern R8 still
+frozen; next is width ON/OFF A/B (Grok path) because the harness can hear. This
+PR makes no live change and records no status flips.
+
+## 2026-08-22 width ON/OFF A/B INCONCLUSIVE
+
+Paper-only CoS width ON/OFF A/B bank at eval HEAD `ae6d5b0`; main may be
+`6390ba8+`. Evidence path:
+`/var/aura/evidence/evals/width-ab-20260822/` (`SUMMARY.md`,
+`comparison.json`).
+
+This section banks evidence only: no YAML status changes, no `RegimeParams`
+default changes, no live scopes, no constellation/RIVER, no runtime state, and
+no Intern R8 unlock. The spine defaults are unchanged.
+
+WIDTH ON is the thin production default spine: HTF+width ON, ADX/dwell OFF, via
+normal `--id`. WIDTH OFF is evidence-only `--path` override behavior with
+`regime.params.phase2_ablation` setting `kumo_width_atr=false`.
+
+Locked set: `ichi_v0_baseline`, `ichi_params_20_60_trend_v0`
+(`scarred_control`), `ichi_always_on_tsmom_thin_v0` (`scarred_control`), and
+`ichi_cloud_bias_tsmom_thin_v0` (`champion_control`) across WIDTH ON/OFF and
+`PF_XBTUSD` + `PF_ETHUSD` = 16 runs.
+
+Flags:
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 37 --metrics-only`.
+
+| Measure | PF_XBTUSD | PF_ETHUSD | CoS read |
+|---|---|---|---|
+| Flip-rate | 0.1626 -> 0.1596 (-1.84% rel) | 0.1463 -> 0.1435 (-1.95% rel) | Noise. |
+| `TREND_*` occupancy | 24.55% -> 30.72% (+6.17pp) | 23.97% -> 29.22% (+5.25pp) | Width is not a label no-op. |
+| Champion `ichi_cloud_bias_tsmom_thin_v0` OOS ATR | 60.65 -> 74.39 (+13.74) | 97.61 -> 96.09 (-1.52) | Mixed sign. |
+| Champion `ichi_cloud_bias_tsmom_thin_v0` DSR | 0.343 -> 0.436 | 0.729 -> 0.655 | Mixed sign. |
+
+CoS disposition: **INCONCLUSIVE** -- neither DROP nor KEEP_IN_SPINE under the
+Grok falsifier, because the ATR move is mixed-sign and flip-rate did not move
+beyond noise.
+
+Locked implication: production thin spine leaves width ON; no further N is
+spent on width. Intern R8 remains frozen. The next planned unscarred shot is 4h
+signal/regime-TF entry, not in this PR.
+
+## 2026-08-22 4h regime-TF signal one-shot
+
+Paper-only CoS bank for `ichi_cloud_bias_tsmom_4h_v0` at HEAD `6a4054c`.
+Evidence path: `/var/aura/evidence/evals/tf4h-cloud-bias-20260822/`.
+
+Flags:
+`--tf 4h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only`.
+
+Adaptation note: regime labels were sourced from stored 1h OHLCV for the
+Phase-2 regime/HTF classifier; trading decisions and PnL stayed on stored 4h
+decision bars.
+
+| Date | Cartridge id | Symbols | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_cloud_bias_tsmom_4h_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 4h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only` | 6a4054c | dexter paper | XBT IS ATR 14.01 < baseline 17.31 (lose), OOS 37.57 > 26.32 (beat), trades 109/48. ETH IS 67.82 < 78.56 (lose), OOS 27.49 > -3.95 (beat), trades 96/39. | false | killed forever | IS lost both symbols under the falsifier despite OOS beats; do not revive. |
+
+Disposition: **killed forever** -- IS lose both symbols; do not revive
+`ichi_cloud_bias_tsmom_4h_v0`. Intern re-freeze after this bank; no family mill.

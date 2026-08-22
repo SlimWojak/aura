@@ -4,7 +4,12 @@ from pathlib import Path
 import unittest
 from unittest import TestCase
 
-from runtime.research.cartridge import load_cartridge, load_cartridges, validate_cartridge
+from runtime.research.cartridge import (
+    STATUS_VALUES,
+    load_cartridge,
+    load_cartridges,
+    validate_cartridge,
+)
 
 
 CARTRIDGE_ROOT = Path(__file__).resolve().parents[1] / "research" / "cartridges"
@@ -20,6 +25,7 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_always_on_tsmom_thin_v0",
                 "ichi_chikou_open_space_v0",
                 "ichi_cloud_thickness_v0",
+                "ichi_cloud_bias_tsmom_4h_v0",
                 "ichi_cloud_bias_tsmom_thin_v0",
                 "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
@@ -65,7 +71,7 @@ class ResearchCartridgeTests(TestCase):
         )
         for cartridge in cartridges:
             with self.subTest(cartridge=cartridge["id"]):
-                self.assertIn(cartridge["status"], {"draft", "queued", "killed", "kept"})
+                self.assertIn(cartridge["status"], STATUS_VALUES)
                 if cartridge["id"] in {
                     "ichi_params_20_60_trend_btc_confirm_eth_v0",
                     "ichi_v0_trend_eth_primary_v0",
@@ -79,7 +85,10 @@ class ResearchCartridgeTests(TestCase):
                     self.assertEqual("PF_ETHUSD", cartridge["symbol"])
                 else:
                     self.assertEqual("PF_XBTUSD", cartridge["symbol"])
-                self.assertEqual("1h", cartridge["tf"])
+                if cartridge["id"] == "ichi_cloud_bias_tsmom_4h_v0":
+                    self.assertEqual("4h", cartridge["tf"])
+                else:
+                    self.assertEqual("1h", cartridge["tf"])
                 self.assertIn(
                     cartridge["baseline_ref"],
                     {
@@ -170,9 +179,9 @@ class ResearchCartridgeTests(TestCase):
         self.assertTrue(slow_trend["entry_rules"]["require_chikou_confirmation"])
         self.assertEqual("total_pnl_points_after_fees", slow_trend["kill_criteria"]["baseline_metric"])
         self.assertIn("70/30", slow_trend["notes"])
-        self.assertEqual("kept", slow_trend["status"])
+        self.assertEqual("scarred_control", slow_trend["status"])
         self.assertIn("docs/LEDGER.md", slow_trend["sources"])
-        self.assertIn("provisional paper only", slow_trend["notes"])
+        self.assertIn("Track A/R7 honesty", slow_trend["notes"])
         self.assertIn("ETH secondary OOS", slow_trend["kill_criteria"]["notes"])
 
         self.assertEqual("ichi_v0_baseline", tk_cross["baseline_ref"])
@@ -364,8 +373,8 @@ class ResearchCartridgeTests(TestCase):
         cloud_bias = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_bias_tsmom_thin_v0.yaml")
         expected_statuses = {
             "ichi_kumo_break_thin_v0": "killed",
-            "ichi_always_on_tsmom_thin_v0": "kept",
-            "ichi_cloud_bias_tsmom_thin_v0": "kept",
+            "ichi_always_on_tsmom_thin_v0": "scarred_control",
+            "ichi_cloud_bias_tsmom_thin_v0": "champion_control",
         }
 
         for cartridge in (kumo_break, always_on, cloud_bias):
@@ -412,6 +421,7 @@ class ResearchCartridgeTests(TestCase):
         self.assertFalse(always_on["entry_rules"]["require_chikou_confirmation"])
         self.assertIn("CLI Phase-2 hard veto only", always_on["kill_criteria"]["notes"])
         self.assertIn("not live", always_on["notes"])
+        self.assertIn("not a forever-kill", always_on["notes"])
         self.assertIn("64.55", always_on["notes"])
         self.assertIn("34.92", always_on["notes"])
 
@@ -419,9 +429,31 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("none", cloud_bias["entry_rules"]["require_tk_state"])
         self.assertFalse(cloud_bias["entry_rules"]["require_chikou_confirmation"])
         self.assertIn("not live", cloud_bias["notes"])
+        self.assertIn("Best residual R7 ATR control", cloud_bias["notes"])
         self.assertIn("120.35", cloud_bias["notes"])
         self.assertIn("190.88", cloud_bias["notes"])
         self.assertIn("trades 362 versus 338", cloud_bias["kill_criteria"]["notes"])
+
+    def test_one_shot_four_hour_cloud_bias_kill_loads_requested_contract(self):
+        cartridge = load_cartridge(CARTRIDGE_ROOT / "ichi_cloud_bias_tsmom_4h_v0.yaml")
+
+        self.assertEqual("killed", cartridge["status"])
+        self.assertEqual("PF_XBTUSD", cartridge["symbol"])
+        self.assertEqual("4h", cartridge["tf"])
+        self.assertEqual("ichi_v0_baseline", cartridge["baseline_ref"])
+        self.assertEqual("cloud_bias", cartridge["entry_rules"]["mode"])
+        self.assertEqual(["long", "short"], cartridge["entry_rules"]["allowed_sides"])
+        self.assertEqual("none", cartridge["entry_rules"]["require_tk_state"])
+        self.assertFalse(cartridge["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
+        self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
+        self.assertEqual(12, cartridge["kill_criteria"]["min_trades"])
+        self.assertIn("Killed forever", cartridge["kill_criteria"]["notes"])
+        self.assertIn("stored 1h candles only for regime/HTF labels", cartridge["kill_criteria"]["notes"])
+        self.assertIn("IS ATR-normalized return lost", cartridge["kill_criteria"]["notes"])
+        self.assertIn("docs/LEDGER.md", cartridge["sources"])
+        self.assertIn("6a4054c", cartridge["notes"])
+        self.assertIn("do not revive", cartridge["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")

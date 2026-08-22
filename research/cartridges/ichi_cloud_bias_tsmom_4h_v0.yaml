@@ -1,0 +1,40 @@
+id: ichi_cloud_bias_tsmom_4h_v0
+title: Cloud bias TSMOM decisions on 4h bars
+status: killed
+thesis: Prior thin-spine TSMOM keeps decided on 1h bars under 4h regime labels. Signal at the regime TF instead - cloud-side bias computed and traded on stored 4h OHLCV under the same thin Phase-2 hard veto (1d HTF + kumo width ON; ADX/dwell OFF) - so entry/exit flip on 4h closes, not 1h churn under lagged 4h permissioning.
+symbol: PF_XBTUSD
+tf: 4h
+baseline_ref: ichi_v0_baseline
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: cloud_bias
+  allowed_sides: [long, short]
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: none
+  require_chikou_confirmation: false
+  chikou_mode: close
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 40000
+  min_trades: 12
+  must_beat_baseline: true
+  baseline_metric: atr_normalized_total_return
+  notes: Killed forever by the 2026-08-22 4h regime-TF signal one-shot in docs/LEDGER.md. Eval used --tf 4h decisions with stored 1h candles only for regime/HTF labels; never evaluate this cartridge on 1h as a fallback. Falsifier failed because IS ATR-normalized return lost to the same-flag 4h baseline on both PF_XBTUSD and PF_ETHUSD, despite OOS beats. New id only; do not revive.
+sources:
+  - docs/REGIME.md
+  - docs/LEDGER.md
+  - research/cartridges/ichi_cloud_bias_tsmom_thin_v0.yaml
+  - runtime/market/symbols.py
+  - research/cartridges/SCHEMA.md
+notes: "Killed forever after the 2026-08-22 4h regime-TF signal one-shot at HEAD 6a4054c. Evidence: /var/aura/evidence/evals/tf4h-cloud-bias-20260822/. Flags: --tf 4h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only. Adaptation: regime labels came from stored 1h candles; decisions remained on stored 4h bars. PF_XBTUSD IS ATR 14.01 lost to baseline 17.31, OOS 37.57 beat 26.32, trades 109/48. PF_ETHUSD IS ATR 67.82 lost to baseline 78.56, OOS 27.49 beat -3.95, trades 96/39. Falsifier failure: IS lost both symbols, so do not revive or mill this family."

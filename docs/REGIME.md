@@ -152,10 +152,16 @@ python3.12 -m runtime.tools.eval_run cartridge \
   --regime-htf 1d
 ```
 
-For each 1h decision bar, eval resamples stored 1h OHLCV into the requested
-regime timeframe, classifies labels, and maps the decision to the latest label
-with `as_of <= bar ts_ms`. The gate blocks only new long/short entries; cartridge
-exits and final flatten accounting remain unchanged.
+For each decision bar, eval resamples stored 1h OHLCV into the requested regime
+timeframe, classifies labels, and maps the decision to the latest label with
+`as_of <= bar ts_ms`. When cartridge eval runs at `--tf 4h` or any other
+non-1h decision timeframe, trading signals and PnL remain on the `--tf` candle
+store, while Phase 2 regime/HTF labeling reads
+`${AURA_ROOT}/market/ohlcv/{SYMBOL}/1h.jsonl` as a separate source. Missing
+stored 1h regime source fails closed with an eval error; eval must not silently
+fall back to evaluating a non-1h cartridge on 1h decision bars. The gate blocks
+only new long/short entries; cartridge exits and final flatten accounting remain
+unchanged.
 
 Trend-only cartridges currently require the regime flag and fail closed if it
 is omitted:
