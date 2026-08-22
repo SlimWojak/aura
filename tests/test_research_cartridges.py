@@ -457,10 +457,10 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("6a4054c", cartridge["notes"])
         self.assertIn("do not revive", cartridge["notes"])
 
-    def test_post_ic_vol_di_expansion_draft_loads_requested_contract(self):
+    def test_post_ic_vol_di_expansion_kill_loads_requested_contract(self):
         cartridge = load_cartridge(CARTRIDGE_ROOT / "vol_di_expand_trend_v0.yaml")
 
-        self.assertEqual("draft", cartridge["status"])
+        self.assertEqual("killed", cartridge["status"])
         self.assertEqual("PF_XBTUSD", cartridge["symbol"])
         self.assertEqual("1h", cartridge["tf"])
         self.assertEqual("ichi_cloud_bias_tsmom_thin_v0", cartridge["baseline_ref"])
@@ -474,10 +474,13 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(0.0, cartridge["entry_rules"]["price_cloud_distance_atr_min"])
         self.assertEqual("bias_flip", cartridge["exit_rules"]["mode"])
         self.assertEqual({"type": "none", "params": {}}, cartridge["regime"])
-        self.assertIn("/var/aura/evidence/evals/ic-screen-20260822/", cartridge["notes"])
-        self.assertIn("Intern mill remains frozen", cartridge["notes"])
-        self.assertIn("Do not use adx, flat_*, kumo_width_atr, or tk_spread_atr", cartridge["notes"])
-        self.assertIn("vol_di_expand_trend_v0", cartridge["kill_criteria"]["notes"])
+        self.assertIn("Killed forever", cartridge["kill_criteria"]["notes"])
+        self.assertIn("1.29 versus champion 60.65", cartridge["kill_criteria"]["notes"])
+        self.assertIn("2.86 versus champion 97.61", cartridge["kill_criteria"]["notes"])
+        self.assertIn("/var/aura/evidence/evals/vol-di-expand-20260822/", cartridge["notes"])
+        self.assertIn("507d840", cartridge["notes"])
+        self.assertIn("Intern remains frozen", cartridge["notes"])
+        self.assertIn("no 15m follow-on", cartridge["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")
