@@ -490,6 +490,95 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(denied_signals)
         self.assertEqual("TREND_BULL", denied_signals[0]["entry_gate"]["values"]["state"])
 
+    def test_confirm_symbol_allows_when_same_bar_btc_agrees(self):
+        eth_candles = [candle(index, 100 + index, symbol="PF_ETHUSD") for index in range(96)]
+        btc_candles = [candle(index, 200 + index, symbol="PF_XBTUSD") for index in range(96)]
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(eth_candles), RegimeState.TREND_BULL),
+        ):
+            report = run_backtest_cartridge(
+                eth_candles,
+                cartridge=btc_confirm_eth_cartridge(),
+                symbol="PF_ETHUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+                confirm_candles=btc_candles,
+            )
+
+        self.assertGreater(report["metrics"]["trade_count"], 0)
+        self.assertIn("confirm_gate", report)
+        allowed_long_signals = [
+            signal
+            for signal in report["signals"]
+            if signal["bias"] == "long" and signal["entry_gate"]["allowed"]
+        ]
+        self.assertTrue(allowed_long_signals)
+        self.assertEqual(
+            "confirm_passed",
+            allowed_long_signals[0]["entry_gate"]["values"]["confirm_gate"]["reason"],
+        )
+
+    def test_confirm_symbol_blocks_when_btc_cloud_tk_disagrees(self):
+        eth_candles = [candle(index, 100 + index, symbol="PF_ETHUSD") for index in range(96)]
+        btc_candles = [candle(index, 300 - index, symbol="PF_XBTUSD") for index in range(96)]
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(eth_candles), RegimeState.TREND_BULL),
+        ):
+            report = run_backtest_cartridge(
+                eth_candles,
+                cartridge=btc_confirm_eth_cartridge(),
+                symbol="PF_ETHUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+                confirm_candles=btc_candles,
+            )
+
+        self.assertEqual(0, report["metrics"]["trade_count"])
+        self.assertGreater(report["metrics"]["entry_gate_denied_count"], 0)
+        denied_long_signals = [
+            signal
+            for signal in report["signals"]
+            if signal["bias"] == "long" and not signal["entry_gate"]["allowed"]
+        ]
+        self.assertTrue(denied_long_signals)
+        self.assertEqual("confirm_cloud_tk_disagree", denied_long_signals[0]["entry_gate"]["reason"])
+
+    def test_confirm_symbol_blocks_when_btc_candles_missing(self):
+        eth_candles = [candle(index, 100 + index, symbol="PF_ETHUSD") for index in range(96)]
+
+        with patch.object(
+            backtest_ichimoku,
+            "classify_series",
+            return_value=regime_snapshots(len(eth_candles), RegimeState.TREND_BULL),
+        ):
+            report = run_backtest_cartridge(
+                eth_candles,
+                cartridge=btc_confirm_eth_cartridge(),
+                symbol="PF_ETHUSD",
+                tf="1h",
+                regime_tf="1h",
+                regime_htf=None,
+                confirm_candles=[],
+            )
+
+        self.assertEqual(0, report["metrics"]["trade_count"])
+        self.assertGreater(report["metrics"]["entry_gate_denied_count"], 0)
+        denied_long_signals = [
+            signal
+            for signal in report["signals"]
+            if signal["bias"] == "long" and not signal["entry_gate"]["allowed"]
+        ]
+        self.assertTrue(denied_long_signals)
+        self.assertEqual("confirm_candles_missing", denied_long_signals[0]["entry_gate"]["reason"])
+
     def test_trend_only_cartridge_requires_regime_flag(self):
         cartridge = tk_cloud_strong_cartridge()
         cartridge["id"] = "ichi_tk_strong_trend_only_v0"
@@ -508,6 +597,22 @@ class EvalHarnessTests(TestCase):
             ("ichi_params_20_60_trend_eth_dd_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             ("ichi_params_10_30_trend_v0", fast_cartridge(regime={"type": "none", "params": {}})),
             ("ichi_tenkan_bounce_trend_v0", tenkan_bounce_cartridge()),
+            ("ichi_params_20_60_trend_btc_confirm_eth_v0", btc_confirm_eth_cartridge()),
+            ("ichi_v0_trend_eth_primary_v0", fast_cartridge(regime={"type": "none", "params": {}})),
+            (
+                "ichi_params_20_60_trend_long_only_n8_v0",
+                fast_cartridge(
+                    regime={"type": "none", "params": {}},
+                    entry_rules={
+                        "mode": "always_on",
+                        "allowed_sides": ["long"],
+                        "require_close_vs_cloud": "above_for_long_below_for_short",
+                        "require_tk_state": "tenkan_over_kijun_for_long_under_for_short",
+                        "require_chikou_confirmation": True,
+                        "chikou_mode": "close",
+                    },
+                ),
+            ),
         ]
 
         for cartridge_id, cartridge in cartridges:
@@ -754,10 +859,15 @@ class EvalHarnessTests(TestCase):
         self.assertTrue(Path(output["output_path"]).exists())
 
 
-def candle(index: int, close: int | float) -> dict[str, str | int]:
+def candle(
+    index: int,
+    close: int | float,
+    *,
+    symbol: str = "PF_XBTUSD",
+) -> dict[str, str | int]:
     return {
         "schema": "aura.ohlcv_candle.v1",
-        "symbol": "PF_XBTUSD",
+        "symbol": symbol,
         "tf": "1h",
         "ts_ms": index * 3_600_000,
         "source": SOURCE,
@@ -838,6 +948,25 @@ def tk_cloud_strong_cartridge(entry_rule_overrides: dict | None = None) -> dict:
             "max_bars_in_trade": None,
         },
     )
+
+
+def btc_confirm_eth_cartridge() -> dict:
+    cartridge = fast_cartridge(
+        regime={"type": "none", "params": {}},
+        entry_rules={
+            "mode": "always_on",
+            "allowed_sides": ["long", "short"],
+            "require_close_vs_cloud": "above_for_long_below_for_short",
+            "require_tk_state": "tenkan_over_kijun_for_long_under_for_short",
+            "require_chikou_confirmation": True,
+            "chikou_mode": "close",
+            "confirm_symbol": "PF_XBTUSD",
+            "require_confirm_same_bar": True,
+        },
+    )
+    cartridge["id"] = "ichi_params_20_60_trend_btc_confirm_eth_v0"
+    cartridge["symbol"] = "PF_ETHUSD"
+    return cartridge
 
 
 def tk_cross_cartridge() -> dict:

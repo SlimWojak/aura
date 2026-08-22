@@ -54,6 +54,8 @@ Allowed `entry_rules` keys:
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
 | `require_chikou_confirmation` | bool | Mirrors Ichimoku v0 Chikou confirmation when `true`. |
 | `chikou_mode` | enum | `close` compares close vs close[t-displacement]; `strict` compares long close vs high[t-displacement] and short close vs low[t-displacement]. |
+| `confirm_symbol` | string | Optional same-bar confirmation symbol, for example `PF_XBTUSD`. Requires `require_confirm_same_bar: true`. |
+| `require_confirm_same_bar` | bool | Optional confirm gate. When `true`, entries fail closed unless `confirm_symbol` has a candle with the exact same `ts_ms`, a matching Phase 2 `TREND_*` side under `--regime-tf`/`--regime-htf`, and same-side always-on close-vs-cloud plus TK agreement. |
 | `require_kijun_dip_setup` | bool | Optional TK-strong refinement. When `true`, a bullish TK reclaim requires at least one of the prior `setup_bars` to have Tenkan <= Kijun; short mirrors with Tenkan >= Kijun. |
 | `require_cloud_color_align` | bool | Optional TK-strong refinement. When `true`, long entries require displaced Span A > Span B and short entries require Span A < Span B. |
 | `setup_bars` | integer | Optional positive lookback for setup refinements such as `require_kijun_dip_setup`. |
@@ -66,6 +68,15 @@ bottom and the current close below the current Kumo bottom.
 `tenkan_bounce` is a Tenkan reclaim mode: long fires when the prior close was
 at or below prior Tenkan, current close is above current Tenkan, and current
 close is above the Kumo top; short mirrors below Tenkan and the Kumo bottom.
+
+`confirm_symbol` is intentionally explicit, not inferred from the traded symbol.
+Current runnable confirm semantics are same-bar only: the eval harness loads the
+confirm symbol's stored OHLCV, computes its own Phase 2 labels under the CLI
+`--regime-tf`/`--regime-htf` settings, and denies a non-flat entry unless the
+confirm bar at the same timestamp allows the same side and agrees on the
+always-on cloud/TK direction. Missing confirm candles, missing labels, timestamp
+misalignment, or confirm-side disagreement fail closed. Confirm gates only block
+new entries; exits continue to follow `exit_rules`.
 
 Baseline Ichimoku v0 is represented as:
 
