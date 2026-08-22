@@ -34,7 +34,7 @@ kill_criteria:
   min_trades: 10
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless forced 70/30 ETH IS and OOS beat the fee-on regime-gated ETH ichi_v0_baseline on total_pnl_points_after_fees, ETH OOS fee-on pnl is greater than zero, and the BTC-confirm trade set is not identical to plain ETH 20/60 TREND. Missing or unaligned BTC candles/regime labels fail closed.
+  notes: Kill unless forced 70/30 ETH IS and OOS beat the fee-on regime-gated ETH ichi_v0_baseline on total_pnl_points_after_fees, ETH OOS fee-on pnl is greater than zero, and the BTC-confirm gate is not a no-op versus plain ETH 20/60 TREND with an identical trade set. Missing or unaligned BTC candles/regime labels fail closed.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
