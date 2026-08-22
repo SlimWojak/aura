@@ -1,6 +1,6 @@
 id: enrich_fvg_flat_spanb_trend_v0
 title: Enrichment FVG flat Span B TREND confirm v0
-status: draft
+status: killed
 thesis: Test whether the both-symbol enrichment survivor fvg_flat_spanb_overlap can confirm or veto the frozen TREND_BULL/TREND_BEAR thin-spine side using the latest confirmed daily FVG and a flat displaced Senkou Span B, without using the IC-dead Chikou Daily DR features or Daily DR as a primary trigger.
 symbol: PF_XBTUSD
 tf: 1h
@@ -34,9 +34,9 @@ kill_criteria:
   min_trades: 15
   must_beat_baseline: true
   baseline_metric: atr_normalized_total_return
-  notes: "Draft only for the next paper bake-off. Must beat champion_control ichi_cloud_bias_tsmom_thin_v0 on fee-aware 70/30 OOS ATR-normalized total_return for both PF_XBTUSD and PF_ETHUSD or die. Do not use IC-dead Chikou Daily DR features as a primary trigger; Daily DR agreement is not part of this v0."
+  notes: "Killed forever by the 2026-08-22 failed rank-2 enrichment bake-off in docs/LEDGER.md. Fee-aware 70/30 OOS under the frozen thin Phase-2 spine had to beat champion_control ichi_cloud_bias_tsmom_thin_v0 on ATR-normalized total_return for both PF_XBTUSD and PF_ETHUSD. It lost both: PF_XBTUSD 1.33 versus champion 60.65; PF_ETHUSD 5.80 versus champion 97.61. Never revive this id; the rank-2 FVG/flat-Span-B overlap cartridge is dead."
 sources:
   - docs/LEDGER.md
   - docs/briefs/2026-08-22-enrichment-lane.md
   - research/cartridges/SCHEMA.md
-notes: "Draft rank-2 enrichment cartridge after the 2026-08-22 enrichment IC run at HEAD 86d4ca2. Entry side comes from the frozen thin Phase-2 TREND_* spine under --regime-tf 4h --regime-htf 1d; the latest confirmed daily FVG must overlap a flat displaced Span B for 8 bars and align FVG side with TREND side. Exit is bias_flip. Paper only: no live scopes, no Intern unlock, no ADDR/LTF, no Track A loosen, no killed-id revival, and no control status churn."
+notes: "Killed forever after the 2026-08-22 failed enrichment rank-2 bake-off at HEAD 9fdf1b1. Evidence: /var/aura/evidence/evals/enrich-fvg-spanb-20260822/ (logs + cos-verdict.json). Flags: --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only. Thin-spine defaults stayed HTF+width ON and ADX/dwell OFF. PF_XBTUSD OOS ATR-normalized total_return 1.33 lost to champion_control ichi_cloud_bias_tsmom_thin_v0 60.65; PF_ETHUSD 5.80 lost to champion 97.61. Intern remains frozen; no control status changes, no Track A loosening, no ADDR/LTF, no killed-id revival, and no live behavior."

@@ -124,3 +124,18 @@ The survivor BH q-values remain high at about `0.19` to `0.24`; none clear BH
 new cartridge work. Intern remains frozen, Track A is not loosened, and the next
 draft should prefer the thin Daily FVG/flat-Span-B overlap confirm/veto under
 the frozen TREND_* spine.
+
+## Rank-2 bake-off kill
+
+The follow-on rank-2 cartridge `enrich_fvg_flat_spanb_trend_v0` was killed
+forever after the fee-aware 70/30 OOS bake-off at main tip `9fdf1b1`.
+Evidence: `/var/aura/evidence/evals/enrich-fvg-spanb-20260822/` (`logs` plus
+`cos-verdict.json`). Under the frozen thin Phase-2 spine
+(`--regime-tf 4h --regime-htf 1d`, fee 4bps, `--trial-count 38`), it lost both
+symbols to champion `ichi_cloud_bias_tsmom_thin_v0`: XBT OOS ATR-normalized
+`total_return` 1.33 versus 60.65, ETH 5.80 versus 97.61.
+
+This closes the FVG/flat-Span-B overlap cartridge path. Intern remains frozen;
+there is no control churn, Track A loosening, ADDR/LTF follow-on, killed-id
+revival, or live behavior. Remaining enrichment candidates are only
+`daily_dr_side`, `daily_dr_position`, and cautious `daily_fvg_side`.

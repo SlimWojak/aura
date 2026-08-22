@@ -593,3 +593,31 @@ Status scope: this bank mutates only `vol_di_expand_trend_v0` to `killed`.
 remain unchanged. Intern remains frozen, no control status churn, no Track A
 loosening, no live scopes, and the 15m survivor-derived follow-on remains
 deferred.
+
+## 2026-08-22 failed rank-2 enrichment FVG/flat-Span-B bake-off
+
+Binding CoS verdict for `enrich_fvg_flat_spanb_trend_v0` at main tip
+`9fdf1b1`. Evidence path:
+`/var/aura/evidence/evals/enrich-fvg-spanb-20260822/` (`logs` plus
+`cos-verdict.json`).
+
+Run context: dexter paper, `AURA_ROOT=/var/aura`, thin Phase-2 spine
+(`--regime-tf 4h --regime-htf 1d`, HTF+width ON, ADX/dwell OFF),
+`--tf 1h --fee-bps 4 --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only`.
+
+Kill rule: `enrich_fvg_flat_spanb_trend_v0` had to beat champion
+`ichi_cloud_bias_tsmom_thin_v0` on fee-aware OOS ATR-normalized
+`total_return` for both symbols. It lost both symbols, so the cartridge is
+forever killed.
+
+| Date | Cartridge id | Symbols | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `enrich_fvg_flat_spanb_trend_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 38 --metrics-only` | 9fdf1b1 | dexter paper | OOS ATR total_return: XBT 1.33 vs champion 60.65; ETH 5.80 vs champion 97.61. | false | killed forever | Rank-2 FVG/flat-Span-B overlap loses to `ichi_cloud_bias_tsmom_thin_v0` on both symbols; do not revive. |
+
+Status scope: this bank mutates only `enrich_fvg_flat_spanb_trend_v0` to
+`killed`. `ichi_cloud_bias_tsmom_thin_v0` remains `champion_control`; scarred
+controls remain unchanged. Intern remains frozen, no control status churn, no
+Track A loosening, no live scopes, no ADDR/LTF follow-on, and no killed-id
+revival. The rank-2 FVG/flat-Span-B overlap thesis is dead; remaining
+enrichment candidates are limited to `daily_dr_side`, `daily_dr_position`, and
+cautious `daily_fvg_side`.
