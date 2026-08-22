@@ -131,3 +131,43 @@ previously killed id is revived.
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 2026-08-22 | `ichi_params_20_60_trend_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 88t; pnl_fee +478.56; max_dd 1269.5. OOS: 45t; pnl_fee -107.77; max_dd 883.5 | false | kept | Parent keep stays provisional paper; A does not supersede this kept id and this section does not mutate its cartridge. |
 | 2026-08-22 | `ichi_v0_baseline` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --metrics-only` | b69e633 | dexter paper | IS: 130t; pnl_fee +298.36; max_dd 857.2. OOS: 51t; pnl_fee +420.02; max_dd 624.0 | n/a baseline ref | queued | Fee-on regime-gated ETH baseline reference for R6 comparisons; status is not changed. |
+
+## 2026-08-22 Track A keep rescore
+
+CoS/Curator Track A rescore for provisional keep
+`ichi_params_20_60_trend_v0` at HEAD `dcc6dc6`, host dexter
+`AURA_ROOT=/var/aura`. Rows used
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only`.
+Evidence path:
+`/var/aura/evidence/evals/track-a-rescore-20260822/`.
+This section banks the rescore only: no cartridge status mutation, no new
+cartridges, no live scopes, no constellation/RIVER, and no previously killed id
+is revived. The parent YAML remains `kept` as provisional paper pending human
+forever-kill decision.
+
+### Track A rescore rows
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_params_20_60_trend_v0` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | dcc6dc6 | dexter paper | IS: ATR total 39.89; Sharpe 0.697; PSR 0.858; DSR 0.146; Calmar 0.517; maxDD -33.05; trades 95; legacy pnl_fee +18923.90; maxDD pts 15143. OOS: ATR total 27.45; Sharpe 1.109; PSR 0.866; DSR 0.155; Calmar 1.878; maxDD -14.77; trades 44; legacy pnl_fee +13287.24; maxDD pts 11757 | true | provisional-fail | BTC OOS beats baseline ATR and old OOS gate, but Track A requires DSR >0.95, PBO <0.10, and beating baseline on both symbols. |
+| 2026-08-22 | `ichi_params_20_60_trend_v0` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | dcc6dc6 | dexter paper | IS: ATR total 24.59; Sharpe 0.426; PSR 0.744; DSR 0.071; Calmar 0.313; maxDD -33.65; trades 88; legacy pnl_fee +478.56. OOS: ATR total -2.95; Sharpe -0.117; PSR 0.454; DSR 0.013; Calmar -0.105; maxDD -28.34; trades 45; legacy pnl_fee -107.77 | false | provisional-fail | ETH OOS fails the old gate, loses to baseline ATR, and keeps the parent below the Track A both-symbol requirement. |
+
+### Track A baseline references
+
+| Date | Cartridge id | Symbol | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_v0_baseline` | PF_XBTUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | dcc6dc6 | dexter paper | OOS: ATR total 0.033; DSR 0.017; trades 65; legacy pnl_fee -2000.15 | n/a baseline ref | reference | BTC baseline for same-metric Track A comparison. |
+| 2026-08-22 | `ichi_v0_baseline` | PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | dcc6dc6 | dexter paper | OOS: ATR total 15.05; DSR 0.094; trades 51; legacy pnl_fee +420.02 | n/a baseline ref | reference | ETH baseline beats the provisional keep on OOS ATR and legacy fee PnL. |
+
+### Track A PBO matrix
+
+| Date | Universe | Metric | CSCV groups | Runnable paths | N_honest | PBO | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | BTC | atr_normalized | 8 | 8 | 34 | 0.1143 | provisional-fail | Fails strict PBO <0.10 gate. Runnable PBO universe was 8 paths, not the full 34 trial count. |
+| 2026-08-22 | ETH | atr_normalized | 8 | 8 | 34 | 0.5143 | provisional-fail | Fails PBO <0.10 and ETH OOS baseline comparison. Runnable PBO universe was 8 paths, not the full 34 trial count. |
+| 2026-08-22 | Mixed BTC+ETH | atr_normalized | 8 | 16 | 34 | 0.4143 | provisional-fail | Mixed-symbol matrix fails PBO <0.10. Runnable PBO universe was 16 paths from 8 BTC plus 8 ETH paths, not the full 34 trial count. |
+
+Track A gate for this bank is `DSR > 0.95 AND PBO < 0.10 AND beats baseline
+ATR on BOTH symbols`. CoS/Curator disposition is **provisional-fail**. The
+cartridge remains a provisional paper `kept` YAML until a human forever-kill
+decision.

@@ -134,6 +134,8 @@ The current provisional keep `ichi_params_20_60_trend_v0` already fails the
 both-symbols requirement in the banked ledger: BTC passed the older OOS gate,
 but ETH OOS failed and stayed a paper-only provisional keep. CoS should re-score
 that id on dexter with the commands above before making any new keep decision.
+The first Track A rescore is now banked in `docs/LEDGER.md` as a provisional-fail
+while the cartridge YAML remains a provisional paper keep.
 
 ## Re-scoring the ledger
 
