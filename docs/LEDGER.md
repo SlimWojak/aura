@@ -171,3 +171,27 @@ Track A gate for this bank is `DSR > 0.95 AND PBO < 0.10 AND beats baseline
 ATR on BOTH symbols`. CoS/Curator disposition is **provisional-fail**. The
 cartridge remains a provisional paper `kept` YAML until a human forever-kill
 decision.
+
+## 2026-08-22 Track C exit-vocabulary bake-off
+
+CoS/Curator Track C exit-vocabulary status bank for exact dexter paper rows at
+HEAD `9d53c79`, host dexter, `AURA_ROOT=/var/aura`. Rows used
+`--tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only`.
+Evidence path:
+`/var/aura/evidence/evals/track-c-exit-vocab-20260822/`.
+This section banks three new ids as forever-killed: no new exits, no regime
+ablation, no live scopes, no constellation/RIVER, no lower-TF changes, and no
+previously killed id is revived. The parent `ichi_params_20_60_trend_v0`
+remains `kept` as provisional paper only.
+
+Track C kill criteria: forced 70/30 fee-on OOS must beat parent
+`ichi_params_20_60_trend_v0` on `atr_normalized_total_return`; ATR maxDD must
+not exceed parent by more than 10% on either split; `min_trades >= 12`.
+
+### Track C chronological OOS rows
+
+| Date | Cartridge id | Symbols | Split | tf | Flags | HEAD | Host | Metrics | pass_oos_gate | CoS/Curator disposition | Note |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-08-22 | `ichi_v0_trend_kijun_trail_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | 9d53c79 | dexter paper | XBT OOS ATR total 17.38 < parent 27.45. ETH OOS ATR total -9.10 < parent -2.95; ETH OOS DD 1.17x parent. IS Calmar/maxDD improved both symbols. | false | killed | Forever-killed. OOS return loses despite IS Calmar/maxDD improvement, and ETH OOS DD breaches the parent +10% limit. |
+| 2026-08-22 | `ichi_v0_trend_chandelier_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | 9d53c79 | dexter paper | OOS ATR deeply negative on both symbols; DD breaches. | false | killed | Forever-killed. OOS ATR and DD both fail the Track C gate. |
+| 2026-08-22 | `ichi_v0_trend_atr_stop_v0` | PF_XBTUSD + PF_ETHUSD | OOS 70/30 | 1h | `--fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only` | 9d53c79 | dexter paper | XBT OOS ATR total 36.61 > parent 27.45, but trades 4 < 12 and DD catastrophic. ETH fails. | false | killed | Forever-killed. A single XBT OOS ATR beat cannot pass with too few trades, catastrophic DD, and ETH failure. |

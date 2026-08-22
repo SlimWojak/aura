@@ -1,6 +1,6 @@
 id: ichi_v0_trend_kijun_trail_v0
-title: Ichimoku trend Kijun trail exit draft
-status: draft
+title: Ichimoku trend Kijun trail exit kill
+status: killed
 thesis: Test whether the Phase 2 trend-gated 20/60/120/60 baseline can hold winners longer and cut drawdown by replacing bias_flip exits with an Ichimoku-native Kijun trailing exit.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,10 +32,11 @@ kill_criteria:
   min_trades: 12
   must_beat_baseline: true
   baseline_metric: atr_normalized_total_return
-  notes: "Paper draft only. Forced 70/30 fee-on OOS must beat the fee-on regime-gated ichi_params_20_60_trend_v0 baseline on ATR-normalized total return, and max DD must not exceed that baseline by more than 10% on either split."
+  notes: "Killed forever by the 2026-08-22 Track C exit-vocabulary bank in docs/LEDGER.md. Forced 70/30 fee-on OOS had to beat parent ichi_params_20_60_trend_v0 on ATR-normalized total return, keep ATR maxDD within 1.10x parent on both splits, and meet min_trades >= 12. PF_XBTUSD OOS ATR total 17.38 lost to parent 27.45; PF_ETHUSD OOS ATR total -9.10 lost to parent -2.95 and ETH OOS DD was 1.17x parent."
 sources:
+  - docs/LEDGER.md
   - docs/EVAL.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "Track C exit-vocabulary draft; new id only. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 under the Phase 2 TREND CLI gate, but exits an open long when the closed bar close is below Kijun and exits an open short when close is above Kijun. close_on_flat/close_on_opposite are false so this A/B isolates the trail from bias_flip. CoS will run the dexter bake-off after merge."
+notes: "Killed forever by the 2026-08-22 Track C exit-vocabulary bank in docs/LEDGER.md; new id only, do not revive. Paper-only evidence from dexter at 9d53c79 with AURA_ROOT=/var/aura and flags --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only. Evidence path: /var/aura/evidence/evals/track-c-exit-vocab-20260822/. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 under the Phase 2 TREND CLI gate, but exits an open long when the closed bar close is below Kijun and exits an open short when close is above Kijun. IS Calmar/maxDD improved both symbols, but PF_XBTUSD OOS ATR total 17.38 lost to parent 27.45; PF_ETHUSD OOS ATR total -9.10 lost to parent -2.95 and ETH OOS DD was 1.17x parent. Parent remains kept provisional paper only; this does not revive any R5 kill."

@@ -295,7 +295,7 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("docs/LEDGER.md", long_only_n8["sources"])
         self.assertIn("IS DD >12000", long_only_n8["notes"])
 
-    def test_track_c_exit_vocabulary_drafts_load_requested_modes(self):
+    def test_track_c_exit_vocabulary_kills_load_requested_modes(self):
         kijun_trail = load_cartridge(
             CARTRIDGE_ROOT / "ichi_v0_trend_kijun_trail_v0.yaml"
         )
@@ -306,7 +306,7 @@ class ResearchCartridgeTests(TestCase):
 
         for cartridge in (kijun_trail, chandelier, atr_stop):
             with self.subTest(cartridge=cartridge["id"]):
-                self.assertEqual("draft", cartridge["status"])
+                self.assertEqual("killed", cartridge["status"])
                 self.assertEqual("ichi_params_20_60_trend_v0", cartridge["baseline_ref"])
                 self.assertEqual(20, cartridge["ichimoku"]["tenkan"])
                 self.assertEqual(60, cartridge["ichimoku"]["kijun"])
@@ -317,17 +317,23 @@ class ResearchCartridgeTests(TestCase):
                     cartridge["kill_criteria"]["baseline_metric"],
                 )
                 self.assertIn("70/30 fee-on OOS", cartridge["kill_criteria"]["notes"])
+                self.assertIn("docs/LEDGER.md", cartridge["sources"])
+                self.assertIn("Killed forever", cartridge["notes"])
                 self.assertIn("new id only", cartridge["notes"])
 
         self.assertEqual("kijun_trail", kijun_trail["exit_rules"]["mode"])
         self.assertNotIn("kijun_period", kijun_trail["exit_rules"])
+        self.assertIn("17.38", kijun_trail["notes"])
+        self.assertIn("1.17x parent", kijun_trail["kill_criteria"]["notes"])
         self.assertEqual("chandelier_trail", chandelier["exit_rules"]["mode"])
         self.assertEqual(22, chandelier["exit_rules"]["chandelier_period"])
         self.assertEqual(14, chandelier["exit_rules"]["atr_period"])
         self.assertEqual(3.0, chandelier["exit_rules"]["atr_mult"])
+        self.assertIn("deeply negative", chandelier["kill_criteria"]["notes"])
         self.assertEqual("atr_stop", atr_stop["exit_rules"]["mode"])
         self.assertEqual(14, atr_stop["exit_rules"]["atr_period"])
         self.assertEqual(3.0, atr_stop["exit_rules"]["atr_mult"])
+        self.assertIn("trades were 4 < 12", atr_stop["kill_criteria"]["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")
