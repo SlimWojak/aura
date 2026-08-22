@@ -1,0 +1,38 @@
+id: ichi_tk_cloud_v0
+title: TK cross with cloud-side bias
+status: draft
+thesis: Require a Tenkan Kijun cross or state change to agree with the close being on the correct side of the cloud before taking Ichimoku direction.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichimoku_v0
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: tk_cloud_bias
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tk_cross_only
+  require_chikou_confirmation: true
+exit_rules:
+  mode: flat_on_rule_fail
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 9000
+  min_trades: 25
+  must_beat_baseline: true
+  baseline_metric: total_pnl_points
+  notes: Kill if fewer but stricter entries do not improve total points or drawdown versus baseline.
+sources:
+  - docs/BUILD_PLAN.md
+  - runtime/brain/ichimoku.py
+notes: Eval wiring must distinguish TK cross events from the current baseline TK state before this can be fully tested.

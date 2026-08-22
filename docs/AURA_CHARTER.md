@@ -32,6 +32,8 @@ Fence breach means hard kill and human review before resuming.
 ## Roles
 
 - **Grok Bot Chief of Staff:** primary high-autonomy orchestrator.
+- **Research Intern:** disposable thesis scout that drafts paper-only cartridges
+  in [`research/`](../research/README.md); CoS decides backtest, kill, or keep.
 - **Cursor cloud agents:** repo pull requests and reviewable artifacts.
 - **Claude/Droid on dexter:** runtime-adjacent implementers under briefed
   MISSIONs, paper-only.

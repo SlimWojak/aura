@@ -69,7 +69,10 @@ Exit: CoS can request a tiny supervised paper action end-to-end with traces; col
 3. [x] Thin eval harness: Ichimoku v0 naive backtest report plus trial ledger
    summary for CoS kill/keep evidence. Naive backtest is not an edge claim;
    promotion remains human-gated.
-4. Weekly kill/promote memo; CoS metrics still primary.
+4. [x] Thin research cartridge queue: Research Intern thesis handoff,
+   schema, seed Ichimoku variants, and loader validation. Cartridges are
+   paper-only eval inputs, not runner authority.
+5. Weekly kill/promote memo; CoS metrics still primary.
 
 Exit: ≥2 weekly memos with honest traces; no fence breaches.
 
@@ -101,3 +104,4 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 6. [x] Market OHLCV spine.
 7. [x] Ichimoku v0 signal/evidence path.
 8. [x] Thin eval harness backtest + ledger scorer.
+9. [x] Research cartridge queue scaffold for CoS thesis triage.

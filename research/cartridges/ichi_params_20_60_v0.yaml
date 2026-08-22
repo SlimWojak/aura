@@ -1,0 +1,38 @@
+id: ichi_params_20_60_v0
+title: Ichimoku 20 60 parameter variant
+status: queued
+thesis: Slow the baseline Ichimoku lookbacks to reduce whipsaw in chop while preserving the same explicit cloud, TK, and Chikou confirmations.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichimoku_v0
+ichimoku:
+  tenkan: 20
+  kijun: 60
+  senkou_b: 120
+  displacement: 60
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: true
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 10000
+  min_trades: 20
+  must_beat_baseline: true
+  baseline_metric: total_pnl_points
+  notes: Kill if slower parameters only reduce sample size without improving PnL or drawdown versus baseline.
+sources:
+  - docs/BUILD_PLAN.md
+  - runtime/brain/types.py
+notes: Uses a 20/60/120/60 slow variant; CoS can split out a smaller Senkou B follow-up if this is too inert.
