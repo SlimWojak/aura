@@ -1,5 +1,6 @@
 # Briefs
 
+- 2026-08-22: [Failed-auction brain scope](2026-08-22-failed-auction-brain-scope.md)
 - 2026-08-22: [Aura enrichment lane lock](2026-08-22-enrichment-lane.md)
 - 2026-08-22: [Aura brain-change sequence lock](2026-08-22-brain-change-sequence.md)
 - 2026-08-22: [Aura R7 lateral review brief — banked state & what next](2026-08-22-r7-lateral-what-next.md)

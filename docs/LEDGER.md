@@ -621,3 +621,10 @@ Track A loosening, no live scopes, no ADDR/LTF follow-on, and no killed-id
 revival. The rank-2 FVG/flat-Span-B overlap thesis is dead; remaining
 enrichment candidates are limited to `daily_dr_side`, `daily_dr_position`, and
 cautious `daily_fvg_side`.
+
+## 2026-08-22 failed-auction brain scope
+
+Docs-only scope brief landed at
+`docs/briefs/2026-08-22-failed-auction-brain-scope.md`. No dexter run, data
+ingest, cartridge status mutation, Intern unlock, live scope, or runtime state
+change occurred.
