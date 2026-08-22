@@ -22,9 +22,12 @@ class ResearchCartridgeTests(TestCase):
                 "ichi_kijun_bounce_trend_v0",
                 "ichi_er_regime_v0",
                 "ichi_kumo_break_trend_v0",
+                "ichi_params_10_30_trend_v0",
                 "ichi_params_20_60_v0",
                 "ichi_params_20_60_er_v0",
                 "ichi_params_20_60_trend_v0",
+                "ichi_params_20_60_trend_eth_dd_v0",
+                "ichi_tenkan_bounce_trend_v0",
                 "ichi_tk_cloud_strong_v0",
                 "ichi_tk_strong_trend_cloud_color_v0",
                 "ichi_tk_strong_trend_kijun_dip_v0",
@@ -139,6 +142,39 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual("killed", kumo_break["status"])
         self.assertIn("docs/LEDGER.md", kumo_break["sources"])
         self.assertIn("fee-negative OOS", kumo_break["kill_criteria"]["notes"])
+
+    def test_round_four_research_intern_cartridges_load_requested_modes(self):
+        slow_eth_dd = load_cartridge(
+            CARTRIDGE_ROOT / "ichi_params_20_60_trend_eth_dd_v0.yaml"
+        )
+        mid_pack = load_cartridge(CARTRIDGE_ROOT / "ichi_params_10_30_trend_v0.yaml")
+        tenkan_bounce = load_cartridge(CARTRIDGE_ROOT / "ichi_tenkan_bounce_trend_v0.yaml")
+
+        self.assertEqual("ichi_v0_baseline", slow_eth_dd["baseline_ref"])
+        self.assertEqual(20, slow_eth_dd["ichimoku"]["tenkan"])
+        self.assertEqual(60, slow_eth_dd["ichimoku"]["kijun"])
+        self.assertEqual(25000, slow_eth_dd["kill_criteria"]["max_dd_points"])
+        self.assertEqual("total_pnl_points_after_fees", slow_eth_dd["kill_criteria"]["baseline_metric"])
+        self.assertIn("BTC and ETH", slow_eth_dd["notes"])
+        self.assertIn("new id only", slow_eth_dd["notes"])
+
+        self.assertEqual("ichi_v0_baseline", mid_pack["baseline_ref"])
+        self.assertEqual(10, mid_pack["ichimoku"]["tenkan"])
+        self.assertEqual(30, mid_pack["ichimoku"]["kijun"])
+        self.assertEqual(60, mid_pack["ichimoku"]["senkou_b"])
+        self.assertEqual(30, mid_pack["ichimoku"]["displacement"])
+        self.assertEqual("always_on", mid_pack["entry_rules"]["mode"])
+        self.assertTrue(mid_pack["entry_rules"]["require_chikou_confirmation"])
+        self.assertIn("Mid pack 10/30/60/30", mid_pack["notes"])
+
+        self.assertEqual("ichi_v0_baseline", tenkan_bounce["baseline_ref"])
+        self.assertEqual("tenkan_bounce", tenkan_bounce["entry_rules"]["mode"])
+        self.assertEqual("none", tenkan_bounce["entry_rules"]["require_tk_state"])
+        self.assertFalse(tenkan_bounce["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual("flat_on_rule_fail", tenkan_bounce["exit_rules"]["mode"])
+        self.assertEqual(15, tenkan_bounce["kill_criteria"]["min_trades"])
+        self.assertIn("killed kijun_bounce", tenkan_bounce["kill_criteria"]["notes"])
+        self.assertIn("prior close <= prior Tenkan", tenkan_bounce["notes"])
 
     def test_validate_rejects_unknown_status(self):
         valid = load_cartridge(CARTRIDGE_ROOT / "ichi_v0_baseline.yaml")
