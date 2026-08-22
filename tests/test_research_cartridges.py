@@ -483,10 +483,10 @@ class ResearchCartridgeTests(TestCase):
         self.assertIn("Intern remains frozen", cartridge["notes"])
         self.assertIn("no 15m follow-on", cartridge["notes"])
 
-    def test_enrichment_fvg_flat_spanb_trend_draft_loads_requested_contract(self):
+    def test_enrichment_fvg_flat_spanb_trend_kill_loads_requested_contract(self):
         cartridge = load_cartridge(CARTRIDGE_ROOT / "enrich_fvg_flat_spanb_trend_v0.yaml")
 
-        self.assertEqual("draft", cartridge["status"])
+        self.assertEqual("killed", cartridge["status"])
         self.assertEqual("PF_XBTUSD", cartridge["symbol"])
         self.assertEqual("1h", cartridge["tf"])
         self.assertEqual("ichi_cloud_bias_tsmom_thin_v0", cartridge["baseline_ref"])
@@ -502,10 +502,13 @@ class ResearchCartridgeTests(TestCase):
             "atr_normalized_total_return",
             cartridge["kill_criteria"]["baseline_metric"],
         )
-        self.assertIn("both PF_XBTUSD and PF_ETHUSD or die", cartridge["kill_criteria"]["notes"])
-        self.assertIn("Do not use IC-dead Chikou Daily DR", cartridge["kill_criteria"]["notes"])
-        self.assertIn("86d4ca2", cartridge["notes"])
-        self.assertIn("no Intern unlock", cartridge["notes"])
+        self.assertIn("Killed forever", cartridge["kill_criteria"]["notes"])
+        self.assertIn("1.33 versus champion 60.65", cartridge["kill_criteria"]["notes"])
+        self.assertIn("5.80 versus champion 97.61", cartridge["kill_criteria"]["notes"])
+        self.assertIn("/var/aura/evidence/evals/enrich-fvg-spanb-20260822/", cartridge["notes"])
+        self.assertIn("9fdf1b1", cartridge["notes"])
+        self.assertIn("Intern remains frozen", cartridge["notes"])
+        self.assertIn("no ADDR/LTF", cartridge["notes"])
 
     def test_phase2_ablation_cartridges_load_requested_components(self):
         ab0 = load_cartridge(CARTRIDGE_ROOT / "ichi_p2_ab0_xbt_v0.yaml")
