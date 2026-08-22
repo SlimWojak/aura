@@ -1215,7 +1215,7 @@ def candle(
 
 
 def stored_funding_rate(index: int, relative: str) -> dict[str, str | int]:
-    ts = datetime(2026, 8, 22, tzinfo=UTC) + timedelta(hours=index)
+    ts = datetime(1970, 1, 1, tzinfo=UTC) + timedelta(hours=index)
     return {
         "schema": FUNDING_SCHEMA,
         "symbol": "PF_XBTUSD",
