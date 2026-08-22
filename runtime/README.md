@@ -1,8 +1,9 @@
 # Aura runtime skeleton
 
-Paper-only runtime scaffolding for the future dexter runner. There is no
-strategy logic, live order placement, private Kraken API call, systemd unit, or
-constellation import in this scaffold.
+Paper-only runtime scaffolding for the future dexter runner. There is no live
+order placement, private Kraken API call, systemd unit, or constellation import
+in this scaffold. Strategy code is limited to deterministic signal-only brains
+until a separate human live gate.
 
 ## Module map
 
@@ -26,6 +27,10 @@ constellation import in this scaffold.
 - `runtime.market`
   - Thin OHLCV file spine sourced only from public Kraken Futures Charts HTTPS
     GETs. It stores normalized candles as JSONL for later Ichimoku v0 work.
+- `runtime.brain`
+  - Deterministic signal-only brains. Ichimoku v0 computes standard 9/26/52
+    components from stored OHLCV and emits a discrete `long`/`short`/`flat`
+    hypothesis with retunable feature flags.
 - `runtime.tools.admit_smoke`
   - Human-triggered smoke entrypoint for CoS; no daemon and no venue call.
 - `runtime.tools.supervised_paper`
@@ -36,6 +41,11 @@ constellation import in this scaffold.
 - `runtime.tools.market_ingest`
   - Human-triggered CLI to pull/status/show futures OHLCV files. No strategy,
     no subprocess Kraken command, and no live trading path.
+- `runtime.tools.ichimoku_signal`
+  - Human-triggered CLI to compute Ichimoku v0 and append
+    `aura.brain_signal.v1` JSONL evidence. The default path never places paper
+    orders; `--propose-paper` is explicit and remains dry-run unless
+    `--i-understand-paper` is passed.
 
 ## Risk gate inputs
 
@@ -227,6 +237,60 @@ python3.12 -m runtime.tools.market_ingest pull --symbol PF_XBTUSD --tf 1h
 python3.12 -m runtime.tools.market_ingest status
 python3.12 -m runtime.tools.market_ingest show --symbol PF_XBTUSD --tf 1h --tail 3
 ```
+
+## Ichimoku v0 brain
+
+Ichimoku v0 is the first explicit mathematical brain. It is signal-only by
+default and is a hypothesis for eval, not a claimed edge. The constants are the
+standard 9/26/52 settings with a 26-bar displacement:
+
+- Tenkan-sen: midpoint of highest high and lowest low over 9 bars.
+- Kijun-sen: midpoint of highest high and lowest low over 26 bars.
+- Senkou Span A: midpoint of Tenkan and Kijun, plotted 26 bars ahead.
+- Senkou Span B: midpoint of highest high and lowest low over 52 bars, plotted
+  26 bars ahead.
+- Chikou Span: close plotted 26 bars back.
+
+The latest stored JSONL candle is treated as the latest closed bar. A valid
+signal requires at least 78 candles (`senkou_b + displacement`) so the current
+cloud can use the displaced span values. The v0 rule is deliberately boring:
+
+- `long`: close is above cloud top, Tenkan > Kijun, and current close is above
+  close[t-26].
+- `short`: close is below cloud bottom, Tenkan < Kijun, and current close is
+  below close[t-26].
+- `flat`: anything else.
+
+Compute latest components and bias:
+
+```bash
+python3.12 -m runtime.tools.ichimoku_signal compute --symbol PF_XBTUSD --tf 1h
+```
+
+Append signal evidence under
+`${AURA_ROOT:-/var/aura}/evidence/trials/T-ichi-.../decision.jsonl`:
+
+```bash
+python3.12 -m runtime.tools.ichimoku_signal evaluate --symbol PF_XBTUSD --tf 1h
+```
+
+That evidence line uses schema `aura.brain_signal.v1` with intent
+`brain_signal`, embeds the `aura.ichimoku_signal.v1` payload, and records
+component values plus boolean feature flags for later eval retuning.
+
+An optional supervised proposal path exists, but it is off by default and still
+goes through `run_supervised_order(...)` and `runtime.risk.admit()`:
+
+```bash
+python3.12 -m runtime.tools.ichimoku_signal evaluate \
+  --symbol PF_XBTUSD \
+  --tf 1h \
+  --propose-paper
+```
+
+Without `--i-understand-paper`, the proposal path sets `dry_run=True` and never
+submits a futures-paper order. `flat` bias is always a no-op. There is no live
+scope, no constellation import, no ICT logic, and no daemon.
 
 ## Runner call pattern
 
