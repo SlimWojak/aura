@@ -1,6 +1,6 @@
 id: ichi_tenkan_bounce_trend_v0
 title: Tenkan bounce with Phase 2 trend veto
-status: draft
+status: killed
 thesis: Test close reclaim or rejection at Tenkan under the Phase 2 trend veto as a distinct, faster pullback entry family from the killed Kijun bounce cartridge.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,11 +32,11 @@ kill_criteria:
   min_trades: 15
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless forced 70/30 fee-on regime-gated BTC IS and OOS beat ichi_v0_baseline with at least 15 trades and maxDD no greater than 25000 points; ETH is secondary, and kill if the trade set equals killed kijun_bounce.
+  notes: Killed by the 2026-08-22 R4 Curator status bank in docs/LEDGER.md because fee-on results were negative; distinct from killed kijun_bounce with 282 versus 127 full BTC trades.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_kijun_bounce_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "Forced 70/30; beat fee-on regime-gated baseline IS+OOS; ETH secondary. Entry semantics: long when prior close <= prior Tenkan, current close > Tenkan, and close > Kumo top; short mirrors with prior close >= prior Tenkan, current close < Tenkan, and close < Kumo bottom. Distinct from killed kijun_bounce; do not polish or revive the killed Kijun id."
+notes: "Killed by the 2026-08-22 R4 Curator status bank in docs/LEDGER.md; fee-on negative. Entry semantics: long when prior close <= prior Tenkan, current close > Tenkan, and close > Kumo top; short mirrors with prior close >= prior Tenkan, current close < Tenkan, and close < Kumo bottom. Distinct from killed kijun_bounce with 282 versus 127 full BTC trades; do not polish or revive the killed Kijun id."

@@ -1,6 +1,6 @@
 id: ichi_params_20_60_trend_eth_dd_v0
 title: Ichimoku 20 60 trend-gated ETH drawdown retest
-status: draft
+status: killed
 thesis: Re-run the kept 20/60/120/60 always-on Ichimoku signal under the Phase 2 trend veto with a tighter drawdown gate and explicit BTC plus ETH evidence requirements.
 symbol: PF_XBTUSD
 tf: 1h
@@ -32,11 +32,11 @@ kill_criteria:
   min_trades: 12
   must_beat_baseline: true
   baseline_metric: total_pnl_points_after_fees
-  notes: Kill unless the new id beats the fee-on regime-gated baseline on BTC IS and OOS plus ETH OOS, keeps BTC maxDD at or below 25000 points, and preserves at least 12 trades per half.
+  notes: Killed by the 2026-08-22 R4 Curator status bank in docs/LEDGER.md because ETH OOS was required for this id and failed; BTC is identical to kept parent ichi_params_20_60_trend_v0.
 sources:
   - docs/LEDGER.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - research/cartridges/ichi_v0_baseline.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "new id only; do not revive or mutate killed parents. Same always_on 20/60/120/60 signal as kept parent ichi_params_20_60_trend_v0 with Chikou close confirmation and bias_flip exits. Forced 70/30 on BTC and ETH; beat fee-on regime-gated baseline on BTC IS+OOS and ETH OOS; BTC maxDD <= 25000. Evidence command: eval_run cartridge --id ichi_params_20_60_trend_eth_dd_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7."
+notes: "Killed by the 2026-08-22 R4 Curator status bank in docs/LEDGER.md; new id only; do not revive or mutate killed parents. Same always_on 20/60/120/60 signal as kept parent ichi_params_20_60_trend_v0 with Chikou close confirmation and bias_flip exits. Evidence command: eval_run cartridge --id ichi_params_20_60_trend_eth_dd_v0 --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7. PF_XBTUSD OOS pass_oos_gate=true, but PF_ETHUSD OOS pass_oos_gate=false; ETH OOS was required for this id and failed, and BTC is identical to the parent keep."

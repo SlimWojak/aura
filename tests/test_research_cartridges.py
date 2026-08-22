@@ -155,7 +155,9 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(60, slow_eth_dd["ichimoku"]["kijun"])
         self.assertEqual(25000, slow_eth_dd["kill_criteria"]["max_dd_points"])
         self.assertEqual("total_pnl_points_after_fees", slow_eth_dd["kill_criteria"]["baseline_metric"])
-        self.assertIn("BTC and ETH", slow_eth_dd["notes"])
+        self.assertEqual("killed", slow_eth_dd["status"])
+        self.assertIn("docs/LEDGER.md", slow_eth_dd["sources"])
+        self.assertIn("ETH OOS was required", slow_eth_dd["notes"])
         self.assertIn("new id only", slow_eth_dd["notes"])
 
         self.assertEqual("ichi_v0_baseline", mid_pack["baseline_ref"])
@@ -165,7 +167,10 @@ class ResearchCartridgeTests(TestCase):
         self.assertEqual(30, mid_pack["ichimoku"]["displacement"])
         self.assertEqual("always_on", mid_pack["entry_rules"]["mode"])
         self.assertTrue(mid_pack["entry_rules"]["require_chikou_confirmation"])
+        self.assertEqual("killed", mid_pack["status"])
+        self.assertIn("docs/LEDGER.md", mid_pack["sources"])
         self.assertIn("Mid pack 10/30/60/30", mid_pack["notes"])
+        self.assertIn("Does not displace the 20/60 keep", mid_pack["notes"])
 
         self.assertEqual("ichi_v0_baseline", tenkan_bounce["baseline_ref"])
         self.assertEqual("tenkan_bounce", tenkan_bounce["entry_rules"]["mode"])
@@ -173,7 +178,10 @@ class ResearchCartridgeTests(TestCase):
         self.assertFalse(tenkan_bounce["entry_rules"]["require_chikou_confirmation"])
         self.assertEqual("flat_on_rule_fail", tenkan_bounce["exit_rules"]["mode"])
         self.assertEqual(15, tenkan_bounce["kill_criteria"]["min_trades"])
+        self.assertEqual("killed", tenkan_bounce["status"])
+        self.assertIn("docs/LEDGER.md", tenkan_bounce["sources"])
         self.assertIn("killed kijun_bounce", tenkan_bounce["kill_criteria"]["notes"])
+        self.assertIn("fee-on negative", tenkan_bounce["notes"])
         self.assertIn("prior close <= prior Tenkan", tenkan_bounce["notes"])
 
     def test_validate_rejects_unknown_status(self):
