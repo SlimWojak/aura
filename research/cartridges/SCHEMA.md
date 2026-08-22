@@ -48,12 +48,15 @@ Allowed `entry_rules` keys:
 
 | Key | Type | Allowed values / notes |
 |---|---:|---|
-| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`. |
+| `mode` | enum | `always_on`, `tk_cross`, `cloud_bias`, `tk_cloud_bias`, `kijun_bounce`. |
 | `allowed_sides` | list[enum] | Each item is `long` or `short`. |
 | `require_close_vs_cloud` | enum | `above_for_long_below_for_short`, `outside_cloud`, `none`. |
 | `require_tk_state` | enum | `tenkan_over_kijun_for_long_under_for_short`, `tk_cross_only`, `none`. |
 | `require_chikou_confirmation` | bool | Mirrors Ichimoku v0 Chikou confirmation when `true`. |
 | `chikou_mode` | enum | `close` compares close vs close[t-displacement]; `strict` compares long close vs high[t-displacement] and short close vs low[t-displacement]. |
+| `require_kijun_dip_setup` | bool | Optional TK-strong refinement. When `true`, a bullish TK reclaim requires at least one of the prior `setup_bars` to have Tenkan <= Kijun; short mirrors with Tenkan >= Kijun. |
+| `require_cloud_color_align` | bool | Optional TK-strong refinement. When `true`, long entries require displaced Span A > Span B and short entries require Span A < Span B. |
+| `setup_bars` | integer | Optional positive lookback for setup refinements such as `require_kijun_dip_setup`. |
 
 Baseline Ichimoku v0 is represented as:
 
@@ -118,7 +121,7 @@ Allowed `kill_criteria` keys:
 | `max_dd_points` | number | Kill if max drawdown exceeds this many points. |
 | `min_trades` | integer | Kill or retest if sample size is below this threshold. |
 | `must_beat_baseline` | bool | If true, compare against `baseline_ref`. |
-| `baseline_metric` | enum | `total_pnl_points`, `max_drawdown_points`, `win_rate`, `profit_factor`. |
+| `baseline_metric` | enum | `total_pnl_points`, `total_pnl_points_after_fees`, `max_drawdown_points`, `win_rate`, `profit_factor`. |
 | `notes` | string | Plain-language CoS kill/keep instruction. |
 
 ## Tiny validation example

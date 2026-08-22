@@ -232,6 +232,50 @@ class EvalHarnessTests(TestCase):
         self.assertEqual(0, weak["metrics"]["trade_count"])
         self.assertIn("long", {trade["direction"] for trade in strong["trades"]})
 
+    def test_tk_strong_refinement_filters_reduce_or_match_parent_trades(self):
+        closes = [100, 100, 100, 100, 98, 96, 94, 92, 90, 110, 120, 130, 140, 150]
+        candles = [candle(index, close) for index, close in enumerate(closes)]
+        parent = run_backtest_cartridge(
+            candles,
+            cartridge=tk_cloud_strong_cartridge(),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        kijun_dip = run_backtest_cartridge(
+            candles,
+            cartridge=tk_cloud_strong_cartridge(
+                entry_rule_overrides={"require_kijun_dip_setup": True, "setup_bars": 8}
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+        cloud_color = run_backtest_cartridge(
+            candles,
+            cartridge=tk_cloud_strong_cartridge(
+                entry_rule_overrides={"require_cloud_color_align": True}
+            ),
+            symbol="PF_XBTUSD",
+            tf="1h",
+        )
+
+        self.assertGreater(parent["metrics"]["trade_count"], 0)
+        self.assertLessEqual(kijun_dip["metrics"]["trade_count"], parent["metrics"]["trade_count"])
+        self.assertLessEqual(cloud_color["metrics"]["trade_count"], parent["metrics"]["trade_count"])
+        self.assertTrue(
+            any(
+                signal["features"].get("require_kijun_dip_setup")
+                for signal in kijun_dip["signals"]
+                if signal["ok"]
+            )
+        )
+        self.assertTrue(
+            any(
+                signal["features"].get("require_cloud_color_align")
+                for signal in cloud_color["signals"]
+                if signal["ok"]
+            )
+        )
+
     def test_phase2_regime_gate_reduces_entries_when_regime_denies(self):
         closes = [
             100 + ((index % 16) - 8) + (index * 0.03)
@@ -409,6 +453,41 @@ class EvalHarnessTests(TestCase):
         self.assertNotIn("trades", output)
         self.assertTrue(Path(output["outputs"]["report_json"]).exists())
 
+    def test_cartridge_cli_oos_split_report_contains_both_halves(self):
+        candles = [candle(index, 100 + ((index % 24) - 12) + index * 0.1) for index in range(300)]
+        write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
+
+        output = run_cli(
+            [
+                "cartridge",
+                "--aura-root",
+                str(self.aura_root),
+                "--id",
+                "ichi_v0_baseline",
+                "--symbol",
+                "PF_XBTUSD",
+                "--tf",
+                "1h",
+                "--fee-bps",
+                "4",
+                "--oos-split",
+                "0.7",
+                "--metrics-only",
+            ]
+        )
+
+        self.assertTrue(output["ok"])
+        self.assertEqual(210, output["oos_split"]["is_candle_count"])
+        self.assertEqual(90, output["oos_split"]["oos_candle_count"])
+        self.assertIn("pass_oos_gate", output["oos_split"])
+        self.assertIn("metrics", output["is"])
+        self.assertIn("metrics", output["oos"])
+        self.assertIn("metrics", output["baseline"]["is"])
+        self.assertNotIn("signals", output["is"])
+        saved = json.loads(Path(output["outputs"]["report_json"]).read_text(encoding="utf-8"))
+        self.assertIn("signals", saved["is"])
+        self.assertIn("signals", saved["oos"])
+
     def test_cartridge_cli_lists_runnable_ids_for_unwired_tk_cloud_seed(self):
         candles = [candle(index, 100 + index) for index in range(90)]
         write_candles(ohlcv_path("PF_XBTUSD", "1h", aura_root_override=self.aura_root), candles)
@@ -532,17 +611,20 @@ def fast_cartridge(
     }
 
 
-def tk_cloud_strong_cartridge() -> dict:
+def tk_cloud_strong_cartridge(entry_rule_overrides: dict | None = None) -> dict:
+    entry_rules = {
+        "mode": "tk_cloud_bias",
+        "allowed_sides": ["long", "short"],
+        "require_close_vs_cloud": "above_for_long_below_for_short",
+        "require_tk_state": "tk_cross_only",
+        "require_chikou_confirmation": False,
+        "chikou_mode": "close",
+    }
+    if entry_rule_overrides:
+        entry_rules.update(entry_rule_overrides)
     return fast_cartridge(
         regime={"type": "none", "params": {}},
-        entry_rules={
-            "mode": "tk_cloud_bias",
-            "allowed_sides": ["long", "short"],
-            "require_close_vs_cloud": "above_for_long_below_for_short",
-            "require_tk_state": "tk_cross_only",
-            "require_chikou_confirmation": False,
-            "chikou_mode": "close",
-        },
+        entry_rules=entry_rules,
         exit_rules={
             "mode": "flat_on_rule_fail",
             "close_on_flat": True,

@@ -8,11 +8,12 @@ from decimal import Decimal, InvalidOperation
 import json
 import os
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from runtime.eval import (
     backtest_from_store,
     cartridge_backtest_from_store,
+    cartridge_oos_backtest_from_store,
     runnable_cartridge_ids,
     score_trials,
     write_report,
@@ -131,6 +132,19 @@ def build_parser() -> ArgumentParser:
         default="1d",
         help="optional higher-timeframe regime veto; use 'none' to disable",
     )
+    oos_split_group = cartridge_parser.add_mutually_exclusive_group()
+    oos_split_group.add_argument(
+        "--oos-split",
+        dest="oos_split",
+        type=float,
+        help="chronological in-sample fraction for an IS/OOS bake-off, e.g. 0.7",
+    )
+    oos_split_group.add_argument(
+        "--is-fraction",
+        dest="oos_split",
+        type=float,
+        help="alias for --oos-split",
+    )
 
     ledger_parser = subparsers.add_parser("ledger", help="rebuild trial ledger summary")
     ledger_parser.add_argument("--aura-root", help="override AURA_ROOT; dexter default is /var/aura")
@@ -185,19 +199,35 @@ def command_backtest(args: Namespace) -> dict[str, Any]:
 def command_cartridge(args: Namespace) -> dict[str, Any]:
     symbol = validate_symbol(args.symbol)
     tf = validate_tf(args.tf)
-    report = cartridge_backtest_from_store(
-        cartridge_id=args.cartridge_id,
-        cartridge_path=args.cartridge_path,
-        symbol=symbol,
-        tf=tf,
-        aura_root=args.aura_root,
-        min_bars=args.min_bars,
-        max_bars=args.max_bars,
-        since_ts_ms=parse_since_ts_ms(args.since),
-        fee_bps=args.fee_bps,
-        regime_tf=args.regime_tf,
-        regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
-    )
+    if args.oos_split is None:
+        report = cartridge_backtest_from_store(
+            cartridge_id=args.cartridge_id,
+            cartridge_path=args.cartridge_path,
+            symbol=symbol,
+            tf=tf,
+            aura_root=args.aura_root,
+            min_bars=args.min_bars,
+            max_bars=args.max_bars,
+            since_ts_ms=parse_since_ts_ms(args.since),
+            fee_bps=args.fee_bps,
+            regime_tf=args.regime_tf,
+            regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
+        )
+    else:
+        report = cartridge_oos_backtest_from_store(
+            cartridge_id=args.cartridge_id,
+            cartridge_path=args.cartridge_path,
+            symbol=symbol,
+            tf=tf,
+            aura_root=args.aura_root,
+            min_bars=args.min_bars,
+            max_bars=args.max_bars,
+            since_ts_ms=parse_since_ts_ms(args.since),
+            fee_bps=args.fee_bps,
+            regime_tf=args.regime_tf,
+            regime_htf=parse_optional_tf(args.regime_htf) if args.regime_tf else None,
+            oos_split=args.oos_split,
+        )
     eval_id = default_eval_id(symbol=symbol, tf=tf, cartridge_id=report["cartridge"]["id"])
     output_dir = evidence_root(args.aura_root) / "evals" / eval_id
     report["eval_id"] = eval_id
@@ -260,6 +290,8 @@ def parse_since_ts_ms(raw_since: str | None) -> int | None:
 
 
 def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
+    if "oos_split" in report:
+        return oos_metrics_only_report(report)
     keys = (
         "schema",
         "ok",
@@ -283,6 +315,61 @@ def metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
         "window",
         "metrics",
         "outputs",
+    )
+    return {key: report[key] for key in keys if key in report}
+
+
+def oos_metrics_only_report(report: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "schema",
+        "ok",
+        "reason",
+        "generated_at",
+        "eval_id",
+        "symbol",
+        "tf",
+        "market_path",
+        "source_candle_count",
+        "candle_count",
+        "evaluated_bars",
+        "min_bars",
+        "params",
+        "fee_bps",
+        "fee_assumption",
+        "fee_model",
+        "cartridge",
+        "regime_gate",
+        "engine",
+        "window",
+        "metrics",
+        "oos_split",
+        "outputs",
+    )
+    compact = {key: report[key] for key in keys if key in report}
+    compact["is"] = compact_half_report(report["is"])
+    compact["oos"] = compact_half_report(report["oos"])
+    compact["baseline"] = {
+        "ref": report["baseline"]["ref"],
+        "is": compact_half_report(report["baseline"]["is"]),
+        "oos": compact_half_report(report["baseline"]["oos"]),
+    }
+    return compact
+
+
+def compact_half_report(report: Mapping[str, Any]) -> dict[str, Any]:
+    keys = (
+        "ok",
+        "reason",
+        "symbol",
+        "tf",
+        "candle_count",
+        "evaluated_bars",
+        "min_bars",
+        "fee_bps",
+        "cartridge",
+        "regime_gate",
+        "engine",
+        "metrics",
     )
     return {key: report[key] for key in keys if key in report}
 
