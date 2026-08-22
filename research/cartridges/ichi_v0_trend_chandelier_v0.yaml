@@ -1,6 +1,6 @@
 id: ichi_v0_trend_chandelier_v0
-title: Ichimoku trend Chandelier trail exit draft
-status: draft
+title: Ichimoku trend Chandelier trail exit kill
+status: killed
 thesis: Test whether an ATR-scaled Chandelier trail improves the Phase 2 trend-gated 20/60/120/60 baseline by letting winners run while tightening only after favorable range expansion.
 symbol: PF_XBTUSD
 tf: 1h
@@ -35,10 +35,11 @@ kill_criteria:
   min_trades: 12
   must_beat_baseline: true
   baseline_metric: atr_normalized_total_return
-  notes: "Paper draft only. Forced 70/30 fee-on OOS must beat the fee-on regime-gated ichi_params_20_60_trend_v0 baseline on ATR-normalized total return, and max DD must not exceed that baseline by more than 10% on either split."
+  notes: "Killed forever by the 2026-08-22 Track C exit-vocabulary bank in docs/LEDGER.md. Forced 70/30 fee-on OOS had to beat parent ichi_params_20_60_trend_v0 on ATR-normalized total return, keep ATR maxDD within 1.10x parent on both splits, and meet min_trades >= 12. OOS ATR was deeply negative on both PF_XBTUSD and PF_ETHUSD, and DD breached the parent +10% limit."
 sources:
+  - docs/LEDGER.md
   - docs/EVAL.md
   - docs/REGIME.md
   - research/cartridges/ichi_params_20_60_trend_v0.yaml
   - runtime/eval/backtest_ichimoku.py
-notes: "Track C exit-vocabulary draft; new id only. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 under the Phase 2 TREND CLI gate, but exits on a close through a tighten-only Chandelier trail: highest_high(22) - 3.0 * ATR(14) for longs and lowest_low(22) + 3.0 * ATR(14) for shorts. close_on_flat/close_on_opposite are false so this A/B isolates the trail from bias_flip. CoS will run the dexter bake-off after merge."
+notes: "Killed forever by the 2026-08-22 Track C exit-vocabulary bank in docs/LEDGER.md; new id only, do not revive. Paper-only evidence from dexter at 9d53c79 with AURA_ROOT=/var/aura and flags --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14 --trial-count 34 --metrics-only. Evidence path: /var/aura/evidence/evals/track-c-exit-vocab-20260822/. Same always_on 20/60/120/60 entry as ichi_params_20_60_trend_v0 under the Phase 2 TREND CLI gate, but exits on a close through a tighten-only Chandelier trail: highest_high(22) - 3.0 * ATR(14) for longs and lowest_low(22) + 3.0 * ATR(14) for shorts. OOS ATR was deeply negative on both symbols and DD breached the parent +10% limit. Parent remains kept provisional paper only; this does not revive any R5 kill."
