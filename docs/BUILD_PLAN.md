@@ -60,7 +60,9 @@ Exit: CoS can request a tiny supervised paper action end-to-end with traces; col
 2. [x] Ichimoku v0 signal brain: standard 9/26/52 + 26 displacement, deterministic
    `long`/`short`/`flat` output, JSONL evidence, optional dry supervised proposal;
    **not** ICT/ATOM and not live trading.
-3. Eval harness: pre-register trial → paper run → bank nulls/graves in LEDGER.
+3. [x] Thin eval harness: Ichimoku v0 naive backtest report plus trial ledger
+   summary for CoS kill/keep evidence. Naive backtest is not an edge claim;
+   promotion remains human-gated.
 4. Weekly kill/promote memo; CoS metrics still primary.
 
 Exit: ≥2 weekly memos with honest traces; no fence breaches.
@@ -92,4 +94,4 @@ Exit: ≥2 weekly memos with honest traces; no fence breaches.
 5. [x] Kill-drill CLI wiring and one-shot drill smoke.
 6. [x] Market OHLCV spine.
 7. [x] Ichimoku v0 signal/evidence path.
-8. Eval harness.
+8. [x] Thin eval harness backtest + ledger scorer.
