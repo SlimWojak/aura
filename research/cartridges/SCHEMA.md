@@ -92,6 +92,12 @@ entry_rules:
   chikou_mode: close
 ```
 
+The eval harness also supports Chikou-off `always_on` cartridges with the same
+cloud-side and TK-state gates, plus `cloud_bias` cartridges with
+`require_tk_state: none` and `require_chikou_confirmation: false`. These are
+paper-only state filters; Phase 2 thin-spine vetoes still come from explicit CLI
+flags such as `--regime-tf 4h --regime-htf 1d`, not from `regime.type`.
+
 ## Exit rule vocabulary
 
 Allowed `exit_rules` keys:

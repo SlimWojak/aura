@@ -1,0 +1,39 @@
+id: ichi_always_on_tsmom_thin_v0
+title: Ichimoku always-on TSMOM thin-spine v0
+status: draft
+thesis: Test always-on cloud plus TK trend-state momentum under the thinned Phase-2 HTF+width spine without Chikou confirmation.
+symbol: PF_XBTUSD
+tf: 1h
+baseline_ref: ichi_v0_baseline
+ichimoku:
+  tenkan: 9
+  kijun: 26
+  senkou_b: 52
+  displacement: 26
+entry_rules:
+  mode: always_on
+  allowed_sides:
+    - long
+    - short
+  require_close_vs_cloud: above_for_long_below_for_short
+  require_tk_state: tenkan_over_kijun_for_long_under_for_short
+  require_chikou_confirmation: false
+  chikou_mode: close
+exit_rules:
+  mode: bias_flip
+  close_on_flat: true
+  close_on_opposite: true
+  max_bars_in_trade: null
+regime:
+  type: none
+  params: {}
+kill_criteria:
+  max_dd_points: 40000
+  min_trades: 15
+  must_beat_baseline: true
+  baseline_metric: atr_normalized_total_return
+  notes: Thin-spine flags + forced 70/30. Beat ATR-norm of same-flag baseline IS+OOS. Count trial N. Thin spine via CLI Phase-2 hard veto only, not a soft regime type.
+sources:
+  - docs/REGIME.md
+  - research/cartridges/SCHEMA.md
+notes: "R7 Research Intern draft under thinned Phase-2 defaults (HTF+width; ADX/dwell off). Evidence path: eval_run cartridge --id ichi_always_on_tsmom_thin_v0 --symbol PF_XBTUSD --tf 1h --fee-bps 4 --regime-tf 4h --regime-htf 1d --oos-split 0.7 --atr-period 14. PF_ETHUSD is secondary eval context only; PF_XBTUSD remains the primary schema symbol. New id only."
