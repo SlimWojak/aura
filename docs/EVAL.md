@@ -128,6 +128,12 @@ Use ATR-normalized return stats for the decision memo. A component earns its
 place only if removing it materially worsens ATR Calmar/MAR or DSR on both
 symbols versus AB-FULL. Do not mutate cartridge statuses from these draft runs.
 
+After the banked ablation and Slim lock, omitted `phase2_ablation` metadata no
+longer implies the old all-on stack. With `--regime-tf`/`--regime-htf`, the
+paper eval default is the thinned production spine: HTF veto and kumo width/ATR
+on, ADX/DI and dwell/hysteresis off. Use explicit AB-FULL cartridges when an
+eval needs to reconstruct the old all-on component stack.
+
 ## PBO / CSCV v0
 
 The `matrix` command loads saved `report.json` files containing

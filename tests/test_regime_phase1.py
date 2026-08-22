@@ -48,7 +48,15 @@ class RegimePhase1Tests(TestCase):
             {state.value for state in RegimeState},
         )
 
-    def test_known_strong_uptrend_reaches_trend_bull_after_dwell(self):
+    def test_default_phase2_spine_is_htf_width_only(self):
+        params = RegimeParams()
+
+        self.assertFalse(params.use_adx_di)
+        self.assertTrue(params.use_kumo_width_atr)
+        self.assertTrue(params.use_htf_veto)
+        self.assertFalse(params.use_dwell)
+
+    def test_known_strong_uptrend_reaches_trend_bull_with_thin_defaults(self):
         snapshots = classify_series(
             [candle(index, 100 + index) for index in range(30)],
             params=FAST_PARAMS,
@@ -83,6 +91,7 @@ class RegimePhase1Tests(TestCase):
             flat_n=3,
             flat_atr_fraction=0.05,
             dwell_bars=1,
+            use_adx_di=True,
         )
         candles = [candle(index, 100, high=101, low=99) for index in range(25)]
         candles.extend(candle(index, 104, high=105, low=103) for index in range(25, 28))
@@ -130,6 +139,8 @@ class RegimePhase1Tests(TestCase):
             flat_n=3,
             flat_atr_fraction=0.05,
             dwell_bars=3,
+            use_adx_di=True,
+            use_dwell=True,
         )
         candles = [candle(index, 100 + index) for index in range(25)]
         candles.append(candle(25, 123))
@@ -154,6 +165,8 @@ class RegimePhase1Tests(TestCase):
             flat_n=3,
             flat_atr_fraction=0.05,
             dwell_bars=1,
+            use_adx_di=True,
+            use_kumo_width_atr=True,
         )
         candles = [candle(index, 100 + index) for index in range(30)]
 
@@ -184,6 +197,8 @@ class RegimePhase1Tests(TestCase):
             flat_n=3,
             flat_atr_fraction=0.05,
             dwell_bars=3,
+            use_adx_di=True,
+            use_dwell=True,
         )
         candles = [candle(index, 100 + index) for index in range(25)]
         candles.append(candle(25, 123))

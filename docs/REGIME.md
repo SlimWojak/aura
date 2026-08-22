@@ -37,11 +37,25 @@ for review in `runtime/regime/defaults.yaml`:
 
 - Ichimoku 9/26/52 with displacement 26.
 - Regime timeframe `4h`, resampled from stored `1h` OHLCV.
-- Optional higher-timeframe veto `1d`.
+- Higher-timeframe veto `1d` enabled by default.
 - ADX period 14, `adx_weak=20`, `adx_strong=25`.
 - `thin_kumo_atr=0.4`.
 - Span-B/Kijun/Tenkan flatness over `flat_n=8` bars using a small ATR fraction.
-- Dwell `3` closed regime bars before state changes.
+- Dwell setting `3` closed regime bars before state changes.
+
+Slim-approved Phase 2 production hard-veto defaults are now the thinned spine:
+
+- `use_htf_veto: true` — keep the 1d higher-timeframe veto on.
+- `use_adx_di: false` — drop ADX/+DI/-DI from the default spine.
+- `use_dwell: false` — drop dwell/hysteresis from the default spine.
+- `use_kumo_width_atr: true` — leave kumo width/ATR on pending follow-up because
+  the width ablation was inconclusive.
+
+This is the paper-eval default when `--regime-tf`/`--regime-htf` are supplied
+and no `regime.params.phase2_ablation` override is present. The change follows
+the banked Phase 2 ablation and Slim lock; the final ablation evidence path and
+LEDGER row are forthcoming, so this document records only the approved default
+policy and does not mutate cartridge statuses.
 
 Price-vs-kumo always uses displaced spans under the current bar:
 `spanA[t-displacement]` and `spanB[t-displacement]`. The classifier never uses
@@ -51,7 +65,7 @@ undisplaced raw spans for current price location.
 
 Classification is deterministic:
 
-1. `TREND_BULL` / `TREND_BEAR` only when the full stack holds.
+1. `TREND_BULL` / `TREND_BEAR` only when the active stack holds.
 2. `TRANSITION` on future kumo twist or higher-timeframe disagreement.
 3. `RANGE` on explicit range structure.
 4. `VOLATILE` when price is outside the kumo without trend agreement.
@@ -64,7 +78,7 @@ Classification is deterministic:
 - close above displaced kumo top;
 - Tenkan > Kijun;
 - current close > close[t-displacement] Chikou proxy;
-- ADX >= `adx_strong` and +DI > -DI;
+- when `use_adx_di=true`, ADX >= `adx_strong` and +DI > -DI;
 - displaced kumo width / ATR >= `thin_kumo_atr`;
 - not breaking into a long flat Senkou Span B run;
 - if daily HTF is provided, daily price is not below daily kumo.
@@ -73,14 +87,16 @@ Classification is deterministic:
 
 ### Range and volatility
 
-`RANGE` fires when price is inside the kumo, or the kumo is thin while ADX is
-weak, or both Tenkan and Kijun are flat.
+`RANGE` fires when price is inside the kumo, when both Tenkan and Kijun are
+flat, or, when ADX/DI and width filters are both enabled, the kumo is thin while
+ADX is weak.
 
-`VOLATILE` fires when price is outside the kumo but ADX is below `adx_strong`,
-TK alignment opposes location, or DI disagrees with location.
+`VOLATILE` fires when price is outside the kumo but TK alignment opposes
+location, or, when ADX/DI is enabled, ADX is below `adx_strong` or DI disagrees
+with location.
 
-`TRANSITION` covers known future cloud twists, HTF/LTF disagreement, dwell
-pending after price just left the kumo, and fail-closed missing features.
+`TRANSITION` covers known future cloud twists, HTF/LTF disagreement, optional
+dwell pending after price just left the kumo, and fail-closed missing features.
 
 ## CLI labeler
 
@@ -157,10 +173,16 @@ The kijun-bounce cartridge adds a paper eval entry mode:
 ### Phase 2 ablation drafts
 
 Phase 2 ablations are explicit draft cartridges only; they do not weaken the
-default hard-veto spine and do not change supervised paper defaults. The eval
-harness recognizes optional `regime.params.phase2_ablation` metadata on these
-cartridges and maps it into classifier component switches. When the metadata is
-absent, existing cartridge behavior is unchanged.
+default hard-veto policy outside the requested component map and do not change
+cartridge statuses. The eval harness recognizes optional
+`regime.params.phase2_ablation` metadata on these cartridges and maps it into
+classifier component switches. When the metadata is absent but `--regime-tf` is
+present, Phase 2 remains enabled with the new thinned production defaults:
+HTF veto and kumo width/ATR on, ADX/DI and dwell/hysteresis off.
+
+AB-FULL ablation cartridges still exist to reconstruct the old all-on stack via
+`phase2_ablation.components`: ADX/DI, kumo width/ATR, HTF veto, and
+dwell/hysteresis all enabled.
 
 Run each cartridge on its declared symbol with forced 70/30 fee-on OOS and an
 honest trial count covering the whole ablation set:

@@ -13,3 +13,7 @@ thin_kumo_atr: 0.4
 flat_n: 8
 flat_atr_fraction: 0.05
 dwell_bars: 3
+use_adx_di: false
+use_kumo_width_atr: true
+use_htf_veto: true
+use_dwell: false
