@@ -495,19 +495,37 @@ CoS verdict: funding drag is small and causes no status flips. Default eval
 remains fee-only; Intern remains frozen. Short-window caveat applies: this is
 not full-history Track A.
 
-## 2026-08-22 IC feature screen harness stub
+## 2026-08-22 IC feature screen run
 
-This is a harness stub only, not a dexter run result. The next locked brain-change
-step is a per-bar IC / feature screen over stored `PF_XBTUSD` and `PF_ETHUSD`
-1h OHLCV before any survivor-derived 15m comparison or Track A bake-off spend.
+Paper-only CoS IC feature screen bank for the dexter run at harness merge
+PR #46 -> HEAD `96dc416`. Evidence path:
+`/var/aura/evidence/evals/ic-screen-20260822/` (`report.json`,
+`scores.csv`, `SUMMARY.md`, `run.log`).
 
-Planned evidence path pattern:
-`/var/aura/evidence/evals/ic-screen-YYYYMMDD/` with `report.json`,
-`scores.csv`, and `SUMMARY.md`.
+Command:
+```bash
+python3 -m runtime.tools.eval_run ic-screen \
+  --aura-root /var/aura \
+  --symbols PF_XBTUSD,PF_ETHUSD \
+  --tf 1h \
+  --horizons 4,12,24,48 \
+  --atr-period 14 \
+  --output-id ic-screen-20260822
+```
 
 Harness contract: forward ATR-normalized returns at horizons 4/12/24/48; HAC
 CIs for overlapping returns; Benjamini-Hochberg q-values across emitted feature
-tests; feature dead when usable CIs span 0 on both symbols.
+tests. Kill rule: a feature is dead only when every usable CI spans 0 on both
+symbols.
 
-This stub banks no YAML status changes, no cartridge revival, no Intern unlock,
-no lower-timeframe ingest, no live scopes, and no Track A loosening.
+| Bucket | Features | CoS read |
+|---|---|---|
+| Dead features | `adx`, `flat_kijun_bars`, `flat_spanb_bars`, `flat_tenkan_bars`, `kumo_width_atr`, `tk_spread_atr` | Every usable CI spans 0 on both symbols. Do not spend Track A on these as feature evidence. |
+| Both-symbol nonzero-CI survivors | `chikou_gap_atr`, `chikou_proxy`, `cloud_bias`, `di_spread`, `price_cloud_distance_atr`, `price_vs_kumo` | Candidate features only. Surviving this screen is not a Track A pass or cartridge keep. |
+| One-symbol-only survivors | `future_twist`, `regime_state`, `thin_kumo`, `tk_align` | Weaker, one-sided evidence. Do not treat as dual-symbol survivors. |
+
+Best BH q-values remain high at about `0.10` to `0.17`; no feature is
+conventionally significant at BH `0.05`. This bank records evidence only: no
+cartridge YAML/status changes, no cartridge revival, no Intern unlock, no
+lower-timeframe ingest, no live scopes, and no Track A loosening. Intern remains
+frozen and Track A is unchanged.

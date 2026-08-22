@@ -31,6 +31,17 @@ does not record run results, mutate cartridge YAML, or authorize a runner.
    - Feature kill rule: a feature whose usable CIs span 0 on both symbols is a
      dead feature.
 
+### Run result
+
+Completed dexter evidence is banked at
+`/var/aura/evidence/evals/ic-screen-20260822/`. Dead features:
+`adx`, `flat_kijun_bars`, `flat_spanb_bars`, `flat_tenkan_bars`,
+`kumo_width_atr`, `tk_spread_atr`. Both-symbol nonzero-CI survivors are
+`chikou_gap_atr`, `chikou_proxy`, `cloud_bias`, `di_spread`,
+`price_cloud_distance_atr`, and `price_vs_kumo`; these are candidate features
+only, not Track A passes. One-symbol-only survivors are `future_twist`,
+`regime_state`, `thin_kumo`, and `tk_align`.
+
 2. **Only after the IC screen, compare survivor-derived 15m impulse-under-TREND
    against `vol-event@1h`.**
    - The comparison must be pre-registered from screen survivors.
